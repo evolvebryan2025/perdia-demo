@@ -140,63 +140,51 @@ export function useAutoFixQuality() {
 
 /**
  * Revise article with editorial feedback
- * Enhanced with validation to ensure AI actually addressed feedback items
- * Per GetEducated issue report - addresses Issues 5 & 6 (edits not sticking, missing links)
+ * Uses surgical revision service for precise, targeted edits
+ * Processes feedback one-at-a-time with programmatic replacement for simple changes
  *
- * CRITICAL FIX (2024): Added word count validation to prevent catastrophic data loss
- * where AI replaces entire article with short summary
+ * REFACTORED: Now uses surgicalRevisionService for reliable edits
+ * - Simple patterns (change X to Y) handled programmatically (no AI)
+ * - Complex changes use minimal AI prompts with very low temperature
+ * - Word count validation to prevent catastrophic data loss
  */
 export function useReviseArticle() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async ({ articleId, content, feedbackItems }) => {
-      // Calculate original word count for validation
-      const originalWordCount = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(w => w.length > 0).length
-      console.log(`[useReviseArticle] Original content: ${originalWordCount} words`)
+      console.log(`[useReviseArticle] Starting surgical revision with ${feedbackItems.length} feedback items`)
 
-      // Strip images from content before sending to AI
-      // Per Bug #3: Prevents logos/images from appearing in AI-revised content
+      // Strip images from content before processing
       const contentWithoutImages = stripImagesFromHtml(content)
 
-      // Use Claude to revise based on feedback
-      const revisedContent = await generationService.claude.reviseWithFeedback(
+      // Use generationService which wraps surgicalRevisionService
+      // Request full result for detailed tracking
+      const result = await generationService.reviseWithFeedback(
         contentWithoutImages,
-        feedbackItems
+        feedbackItems,
+        { returnFullResult: true }
       )
 
-      // CRITICAL VALIDATION: Check that content wasn't accidentally replaced/truncated
-      const revisedWordCount = revisedContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(w => w.length > 0).length
-      console.log(`[useReviseArticle] Revised content: ${revisedWordCount} words (${Math.round(revisedWordCount/originalWordCount*100)}% of original)`)
+      console.log(`[useReviseArticle] Revision complete: ${result.successCount} succeeded, ${result.failCount} failed`)
 
-      // If content is less than 50% of original, reject the revision
-      if (revisedWordCount < originalWordCount * 0.5) {
-        console.error(`[useReviseArticle] CRITICAL: Content reduced from ${originalWordCount} to ${revisedWordCount} words!`)
-        throw new Error(
-          `AI Revision Error: The AI appears to have replaced your article instead of making targeted edits. ` +
-          `Original: ${originalWordCount} words, Result: ${revisedWordCount} words. ` +
-          `Your original content has been preserved. Please try again or make edits manually.`
-        )
+      // Build validation result from surgical service results
+      const validation = {
+        items: result.results.map(r => ({
+          id: r.id,
+          status: r.success ? 'addressed' : 'failed',
+          evidence: r.changeDescription ? [r.changeDescription] : [],
+          warnings: r.error ? [r.error] : [],
+        })),
+        successCount: result.successCount,
+        failCount: result.failCount,
       }
-
-      // Warn if content changed significantly (but still allow)
-      if (revisedWordCount < originalWordCount * 0.8) {
-        console.warn(`[useReviseArticle] Warning: Content reduced by ${Math.round((1 - revisedWordCount/originalWordCount) * 100)}%`)
-      }
-
-      // Import validation dynamically to avoid circular dependencies
-      const { validateRevision, generateValidationSummary } = await import('../utils/revisionValidator')
-
-      // Validate that the AI actually made the requested changes
-      const validation = validateRevision(content, revisedContent, feedbackItems)
-
-      console.log('[useReviseArticle] Validation result:', validation)
 
       // Update article with revised content and mark as revision
       const { data, error } = await supabase
         .from('articles')
         .update({
-          content: revisedContent,
+          content: result.content,
           is_revision: true  // Mark as revised so it shows in Revised tab
         })
         .eq('id', articleId)
@@ -205,7 +193,7 @@ export function useReviseArticle() {
 
       if (error) throw error
 
-      // Update feedback items based on validation results
+      // Update feedback items based on results
       for (const item of validation.items) {
         const updateData = {
           ai_revised: true,
@@ -214,16 +202,13 @@ export function useReviseArticle() {
           ai_validation_warnings: item.warnings.join('; ') || null,
         }
 
-        // Only mark as 'addressed' if validation passed
+        // Only mark as 'addressed' if revision succeeded
         if (item.status === 'addressed') {
           updateData.status = 'addressed'
-        } else if (item.status === 'failed') {
-          // Keep status as 'pending' but mark that AI attempted revision
+        } else {
+          // Mark for manual review
           updateData.status = 'pending_review'
           updateData.ai_revision_failed = true
-        } else {
-          // Partial - mark for manual review
-          updateData.status = 'pending_review'
         }
 
         await supabase
@@ -236,7 +221,7 @@ export function useReviseArticle() {
       return {
         ...data,
         validationResult: validation,
-        validationSummary: generateValidationSummary(validation),
+        validationSummary: `${result.successCount} of ${feedbackItems.length} changes applied successfully`,
       }
     },
     onSuccess: (data) => {
@@ -273,55 +258,34 @@ export function useHumanizeContent() {
 }
 
 /**
- * Revise content based on feedback comments
+ * Revise content based on feedback comments (general feedback without text selections)
  * Per GetEducated spec section 8.3.3 - Article Review UI Requirements
- * Bundles article text + comments as context and sends to AI for revision
+ *
+ * REFACTORED: Uses surgical revision service via generationService
+ * - For feedback with specific text selections, uses programmatic replacement
+ * - For general feedback (no selected text), uses AI with low temperature
  */
 export function useReviseWithFeedback() {
   return useMutation({
     mutationFn: async ({ content, title, feedbackItems, contentType, focusKeyword }) => {
-      // Strip images from content before sending to AI
-      // Per Bug #3: Prevents logos/images from appearing in AI-revised content
+      // Strip images from content before processing
       const contentWithoutImages = stripImagesFromHtml(content)
 
-      // Format feedback items for the prompt
-      const feedbackText = feedbackItems
-        .map((item, i) => `${i + 1}. ${item.comment}`)
-        .join('\n')
+      // Transform feedbackItems to the format expected by surgicalRevisionService
+      // General feedback (no selected_text) will use AI path with low temperature
+      const normalizedItems = feedbackItems.map((item, index) => ({
+        id: `general-feedback-${index}`,
+        selected_text: item.selected_text || item.selectedText || '', // Empty for general feedback
+        comment: item.comment || item.feedback || '',
+        category: item.category,
+        severity: item.severity,
+      }))
 
-      const prompt = `You are revising an article based on editorial feedback.
-
-ARTICLE TITLE: ${title}
-CONTENT TYPE: ${contentType || 'guide'}
-FOCUS KEYWORD: ${focusKeyword || 'N/A'}
-
-EDITORIAL FEEDBACK TO ADDRESS:
-${feedbackText}
-
-CURRENT ARTICLE CONTENT:
-${contentWithoutImages}
-
-INSTRUCTIONS:
-1. Carefully address ALL the feedback items listed above
-2. Maintain the article's overall structure and tone
-3. Keep all existing HTML formatting intact
-4. Do not remove existing content unless specifically requested
-5. Make changes that directly respond to the feedback
-6. Ensure the article remains coherent and well-organized
-7. Keep the content length similar unless asked to expand/reduce
-
-OUTPUT ONLY THE COMPLETE REVISED HTML CONTENT (no explanations, no commentary).`
-
-      // Use Claude to revise with feedback
-      const revisedContent = await generationService.claude.chat([
-        {
-          role: 'user',
-          content: prompt
-        }
-      ], {
-        temperature: 0.7,
-        max_tokens: 4500,
-      })
+      // Use generationService's surgical revision
+      const revisedContent = await generationService.reviseWithFeedback(
+        contentWithoutImages,
+        normalizedItems
+      )
 
       return { content: revisedContent }
     },

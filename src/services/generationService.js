@@ -23,6 +23,7 @@ import {
 } from '../hooks/useContributors'
 import { contentValidator, validateDraft, validateForPublish } from './validation/contentValidator'
 import { calculateQualityScore, getQualityThresholds, calculateQualityScoreAsync } from './qualityScoreService'
+import surgicalRevisionService from './surgicalRevisionService'
 
 class GenerationService {
   constructor() {
@@ -2937,6 +2938,82 @@ OUTPUT ONLY THE FIXED HTML CONTENT.`
       rules_applied_at: new Date().toISOString(),
       rules_version: this.contentRules?.version || 0,
     }
+  }
+
+  // ========================================
+  // SURGICAL REVISION
+  // Precise, targeted edits based on editorial feedback
+  // Replaced complex Claude prompts with programmatic + minimal AI approach
+  // ========================================
+
+  /**
+   * Revise content based on feedback using surgical revision service
+   * This is the recommended method for all AI-assisted revisions
+   *
+   * Handles backward compatibility:
+   * - Accepts both snake_case (selected_text) and camelCase (selectedText) field names
+   * - Returns just the content string for backward compatibility
+   *
+   * @param {string} content - HTML content to revise
+   * @param {Array} feedbackItems - Array of feedback items with selected_text/selectedText and comment/feedback
+   * @param {Object} options - Optional settings (onProgress callback, returnFullResult for detailed output)
+   * @returns {Promise<string>} - Returns just the revised content string
+   */
+  async reviseWithFeedback(content, feedbackItems, options = {}) {
+    console.log(`[Generation] Starting surgical revision with ${feedbackItems.length} feedback items`)
+
+    // Normalize field names for backward compatibility
+    // CatalogArticleDetail uses camelCase, other places use snake_case
+    const normalizedItems = feedbackItems.map((item, index) => ({
+      id: item.id || `feedback-${index}`,
+      selected_text: item.selected_text || item.selectedText || '',
+      comment: item.comment || item.feedback || '',
+      category: item.category,
+      severity: item.severity,
+    }))
+
+    // Calculate original word count for validation
+    const originalWordCount = this.countWords(content)
+    console.log(`[Generation] Original content: ${originalWordCount} words`)
+
+    // Process all feedback using surgical revision service
+    const result = await surgicalRevisionService.processAllFeedback(
+      content,
+      normalizedItems,
+      options
+    )
+
+    // Validate content wasn't truncated
+    const revisedWordCount = this.countWords(result.content)
+    console.log(`[Generation] Revised content: ${revisedWordCount} words (${Math.round(revisedWordCount/originalWordCount*100)}% of original)`)
+
+    // Reject if content was catastrophically reduced
+    if (revisedWordCount < originalWordCount * 0.5) {
+      console.error(`[Generation] CRITICAL: Content reduced from ${originalWordCount} to ${revisedWordCount} words!`)
+      throw new Error(
+        `Revision Error: Content was significantly reduced. ` +
+        `Original: ${originalWordCount} words, Result: ${revisedWordCount} words. ` +
+        `Your original content has been preserved.`
+      )
+    }
+
+    console.log(`[Generation] Surgical revision complete: ${result.successCount} succeeded, ${result.failCount} failed`)
+
+    // Return just the content for backward compatibility
+    // Use options.returnFullResult = true if you need the full result object
+    if (options.returnFullResult) {
+      return result
+    }
+    return result.content
+  }
+
+  /**
+   * Count words in HTML content
+   */
+  countWords(html) {
+    if (!html) return 0
+    const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+    return text.split(' ').filter(w => w.length > 0).length
   }
 }
 
