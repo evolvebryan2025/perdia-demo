@@ -102,196 +102,91 @@ function getTagColorClasses(color) {
 }
 
 /**
- * VersionFeedback - Enhanced feedback/comments section for versions
- * Supports multiple feedback items stored as JSON in notes field
+ * Simple VersionNotes - Notes/comments section for versions
+ * Simplified implementation to avoid hoisting issues
  */
-function VersionFeedback({ versionId, initialNotes, onSave }) {
-  const [isAdding, setIsAdding] = useState(false)
-  const [newFeedback, setNewFeedback] = useState('')
-  const [feedbackType, setFeedbackType] = useState('note') // note, issue, suggestion
+function VersionNotes({ versionId, initialNotes, onSave }) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [notes, setNotes] = useState(initialNotes || '')
   const updateNotes = useUpdateVersionNotes()
 
-  // Parse notes as JSON array or convert single string to array
-  const feedbackItems = useMemo(() => {
-    if (!initialNotes) return []
-    try {
-      const parsed = JSON.parse(initialNotes)
-      return Array.isArray(parsed) ? parsed : [{ text: initialNotes, type: 'note', date: null }]
-    } catch {
-      return initialNotes ? [{ text: initialNotes, type: 'note', date: null }] : []
-    }
-  }, [initialNotes])
-
-  const handleAddFeedback = async () => {
-    if (!newFeedback.trim()) return
-
-    const newItem = {
-      id: Date.now(),
-      text: newFeedback.trim(),
-      type: feedbackType,
-      date: new Date().toISOString(),
-    }
-
-    const updatedItems = [...feedbackItems, newItem]
-
+  const handleSave = async () => {
     await updateNotes.mutateAsync({
       versionId,
-      notes: JSON.stringify(updatedItems)
+      notes: notes.trim()
     })
-
-    setNewFeedback('')
-    setFeedbackType('note')
-    setIsAdding(false)
-    onSave?.(JSON.stringify(updatedItems))
+    setIsEditing(false)
+    onSave?.(notes.trim())
   }
 
-  const handleDeleteFeedback = async (itemId) => {
-    const updatedItems = feedbackItems.filter(item => item.id !== itemId)
-    await updateNotes.mutateAsync({
-      versionId,
-      notes: updatedItems.length > 0 ? JSON.stringify(updatedItems) : ''
-    })
-    onSave?.(updatedItems.length > 0 ? JSON.stringify(updatedItems) : '')
+  if (isEditing) {
+    return (
+      <div className="mt-3 space-y-2">
+        <Textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Add notes or feedback about this version..."
+          className="min-h-[80px] text-sm"
+          autoFocus
+        />
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={updateNotes.isPending}
+            className="gap-1"
+          >
+            {updateNotes.isPending ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Check className="w-3 h-3" />
+            )}
+            Save
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setNotes(initialNotes || '')
+              setIsEditing(false)
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    )
   }
 
-  // Type config with explicit Tailwind classes (dynamic class names don't work at build time)
-  const typeConfig = {
-    note: {
-      icon: MessageSquare,
-      label: 'Note',
-      bgClass: 'bg-blue-50 border border-blue-200',
-      iconClass: 'text-blue-600',
-      textClass: 'text-blue-800',
-      activeClass: 'bg-blue-100 text-blue-700 border border-blue-300',
-    },
-    issue: {
-      icon: AlertCircle,
-      label: 'Issue',
-      bgClass: 'bg-red-50 border border-red-200',
-      iconClass: 'text-red-600',
-      textClass: 'text-red-800',
-      activeClass: 'bg-red-100 text-red-700 border border-red-300',
-    },
-    suggestion: {
-      icon: Lightbulb,
-      label: 'Suggestion',
-      bgClass: 'bg-amber-50 border border-amber-200',
-      iconClass: 'text-amber-600',
-      textClass: 'text-amber-800',
-      activeClass: 'bg-amber-100 text-amber-700 border border-amber-300',
-    },
+  if (initialNotes) {
+    return (
+      <div className="mt-3">
+        <div
+          className="p-2 bg-blue-50 border border-blue-200 rounded-md text-sm flex items-start gap-2 group cursor-pointer hover:bg-blue-100"
+          onClick={() => setIsEditing(true)}
+        >
+          <MessageSquare className="w-4 h-4 mt-0.5 text-blue-600 flex-shrink-0" />
+          <p className="text-blue-800 flex-1">{initialNotes}</p>
+          <Edit3 className="w-3 h-3 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="mt-3 space-y-2">
-      {/* Existing feedback items */}
-      {feedbackItems.length > 0 && (
-        <div className="space-y-2">
-          {feedbackItems.map((item, idx) => {
-            const config = typeConfig[item.type] || typeConfig.note
-            const IconComponent = config.icon
-            return (
-              <div
-                key={item.id || idx}
-                className={cn(
-                  'p-2 rounded-md text-sm flex items-start gap-2 group',
-                  config.bgClass
-                )}
-              >
-                <IconComponent className={cn('w-4 h-4 mt-0.5 flex-shrink-0', config.iconClass)} />
-                <div className="flex-1 min-w-0">
-                  <p className={cn('text-sm', config.textClass)}>{item.text}</p>
-                  {item.date && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      {format(new Date(item.date), 'MMM d, h:mm a')}
-                    </p>
-                  )}
-                </div>
-                <button
-                  onClick={() => handleDeleteFeedback(item.id)}
-                  className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Add feedback form */}
-      {isAdding ? (
-        <div className="space-y-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
-          <div className="flex gap-2">
-            {Object.entries(typeConfig).map(([type, config]) => {
-              const TypeIcon = config.icon
-              return (
-                <button
-                  key={type}
-                  onClick={() => setFeedbackType(type)}
-                  className={cn(
-                    'px-2 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1',
-                    feedbackType === type
-                      ? config.activeClass
-                      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
-                  )}
-                >
-                  <TypeIcon className="w-3 h-3" />
-                  {config.label}
-                </button>
-              )
-            })}
-          </div>
-          <Textarea
-            value={newFeedback}
-            onChange={(e) => setNewFeedback(e.target.value)}
-            placeholder="Add your feedback about this version..."
-            className="min-h-[60px] text-sm"
-            autoFocus
-          />
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              onClick={handleAddFeedback}
-              disabled={updateNotes.isPending || !newFeedback.trim()}
-              className="gap-1"
-            >
-              {updateNotes.isPending ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Plus className="w-3 h-3" />
-              )}
-              Add Feedback
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setNewFeedback('')
-                setIsAdding(false)
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setIsAdding(true)}
-          className="gap-1 w-full justify-center bg-white hover:bg-blue-50 border-dashed"
-        >
-          <MessageSquarePlus className="w-4 h-4 text-blue-600" />
-          <span className="text-blue-600">Add Feedback on This Version</span>
-        </Button>
-      )}
+    <div className="mt-3">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setIsEditing(true)}
+        className="gap-1 w-full justify-center bg-white hover:bg-blue-50 border-dashed"
+      >
+        <MessageSquarePlus className="w-4 h-4 text-blue-600" />
+        <span className="text-blue-600">Add Feedback</span>
+      </Button>
     </div>
   )
 }
-
-// Backwards compatible alias
-const VersionNotes = VersionFeedback
 
 /**
  * VersionTags - Tag management for a version
@@ -509,29 +404,21 @@ function VersionCard({
               tags={version.tags || []}
             />
 
-            {/* Version Feedback - Always show when expanded or has notes */}
+            {/* Version Notes - Always show when expanded or has notes */}
             {(isExpanded || version.notes) && (
-              <VersionFeedback
+              <VersionNotes
                 versionId={version.id}
                 initialNotes={version.notes}
               />
             )}
 
-            {/* Show feedback count indicator if collapsed but has notes */}
-            {!isExpanded && version.notes && (() => {
-              try {
-                const items = JSON.parse(version.notes)
-                const count = Array.isArray(items) ? items.length : 1
-                return (
-                  <div className="mt-2 flex items-center gap-1 text-xs text-blue-600">
-                    <MessageSquare className="w-3 h-3" />
-                    {count} feedback item{count !== 1 ? 's' : ''}
-                  </div>
-                )
-              } catch {
-                return null
-              }
-            })()}
+            {/* Show notes indicator if collapsed but has notes */}
+            {!isExpanded && version.notes && (
+              <div className="mt-2 flex items-center gap-1 text-xs text-blue-600">
+                <MessageSquare className="w-3 h-3" />
+                Has notes
+              </div>
+            )}
           </div>
         </div>
 
