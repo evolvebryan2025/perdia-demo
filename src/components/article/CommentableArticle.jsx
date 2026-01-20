@@ -60,8 +60,7 @@ import {
   getCategoryConfig,
 } from '@/hooks/useArticleComments'
 import { useCreateAIRevision } from '@/hooks/useAIRevisions'
-import ClaudeClient from '@/services/ai/claudeClient'
-import { validateRevision, generateValidationSummary } from '@/utils/revisionValidator'
+import surgicalRevisionService from '@/services/surgicalRevisionService'
 import { cn } from '@/lib/utils'
 
 /**
@@ -534,100 +533,56 @@ export function CommentableArticle({
     // Could implement scroll-to-text functionality here if needed
   }
 
-  // Handle AI revision with validation
+  // Handle AI revision using surgical revision service
+  // Processes each feedback item one at a time for reliability
   const handleAIRevise = async () => {
     if (pendingComments.length === 0) return
 
     setIsRevising(true)
-    setRevisionProgress('Analyzing feedback...')
+    setRevisionProgress('Starting revision...')
 
     try {
-      setRevisionProgress('Building prompt...')
-      const feedbackItems = pendingComments.map((comment, index) => {
-        const categoryConfig = getCategoryConfig(comment.category)
-        const severityConfig = getSeverityConfig(comment.severity)
-        return `${index + 1}. [${categoryConfig.label.toUpperCase()} - ${severityConfig.label.toUpperCase()}]
-   Selected Text: "${comment.selected_text}"
-   Feedback: "${comment.feedback}"`
-      })
-
-      const prompt = `You are revising an article based on editorial feedback. Your output MUST be valid HTML that preserves the original formatting structure.
-
-CRITICAL FORMATTING RULES:
-1. Output ONLY valid HTML - no markdown, no code fences, no explanations
-2. Preserve ALL existing HTML elements: <h2>, <h3>, <p>, <ul>, <ol>, <li>, <a>, <strong>, <em>, <blockquote>
-3. Preserve ALL H2 IDs exactly (e.g., <h2 id="section-name">)
-4. Preserve ALL links (<a> tags) with their href attributes
-5. Preserve ALL shortcodes: [degree_table], [ge_internal_link], [ge_cta], etc.
-6. Keep paragraphs as <p> tags, lists as <ul>/<ol> with <li> items
-7. Do NOT convert HTML to markdown or any other format
-8. Do NOT wrap output in code blocks or add any prefix/suffix text
-
-ARTICLE CONTEXT:
-Title: ${title}
-${focusKeyword ? `Focus Keyword: ${focusKeyword}` : ''}
-${contentType ? `Content Type: ${contentType}` : ''}
-${contributorName ? `Author Style: ${contributorName}${contributorStyle ? ` - ${contributorStyle}` : ''}` : ''}
-
-CURRENT HTML CONTENT:
-${content}
-
-EDITORIAL FEEDBACK TO ADDRESS:
-${feedbackItems.join('\n\n')}
-
-REVISION INSTRUCTIONS:
-1. Apply ALL feedback items to the content
-2. Make targeted changes that address each specific feedback point
-3. Preserve the EXACT same HTML structure and formatting
-4. Keep images (<img> tags) in their current positions unless feedback specifically mentions them
-5. Keep the same approximate length unless told to expand/shorten
-6. Return ONLY the revised HTML content, starting directly with the first HTML tag
-
-Revised HTML:`
-
-      setRevisionProgress('AI is revising...')
-      const claudeClient = new ClaudeClient()
-      // Use chat() for editorial revision, NOT humanize() which is for AI detection bypass
-      // NOTE: max_tokens increased from 4500 to 16000 to prevent content truncation
-      // for long articles (2000+ words). Claude supports up to 100k output tokens.
-      const revisedContent = await claudeClient.chat([
-        { role: 'user', content: prompt }
-      ], {
-        temperature: 0.7,
-        max_tokens: 16000,
-      })
-
-      const cleanedContent = revisedContent
-        .replace(/^```html\s*/i, '')
-        .replace(/```\s*$/i, '')
-        .replace(/^Here is the revised.*?:\s*/i, '')
-        .trim()
-
-      // VALIDATE the revision before marking comments as addressed
-      setRevisionProgress('Validating revision...')
-      const feedbackForValidation = pendingComments.map((c) => ({
+      // Format feedback items for the surgical revision service
+      const feedbackItems = pendingComments.map((c) => ({
         id: c.id,
-        comment: c.feedback,
         selected_text: c.selected_text,
+        comment: c.feedback,
         category: c.category,
         severity: c.severity,
       }))
 
-      const validationResult = validateRevision(content, cleanedContent, feedbackForValidation)
-      console.log('Revision validation result:', validationResult)
+      // Process each feedback item one at a time
+      const result = await surgicalRevisionService.processAllFeedback(
+        content,
+        feedbackItems,
+        {
+          onProgress: ({ current, total, message }) => {
+            setRevisionProgress(`${message} (${current}/${total})`)
+          },
+        }
+      )
+
+      console.log('[CommentableArticle] Surgical revision result:', result)
+
+      // Build validation result from the surgical revision results
+      const validationResult = {
+        items: result.results.map(r => ({
+          id: r.id,
+          status: r.success ? 'addressed' : 'failed',
+          evidence: r.changeDescription,
+          warnings: r.error ? [r.error] : [],
+        })),
+        addressedCount: result.successCount,
+        failedCount: result.failCount,
+        partialCount: 0,
+      }
 
       setRevisionProgress('Saving revision...')
       const revisionData = await createAIRevision.mutateAsync({
         articleId,
         previousVersion: content,
-        revisedVersion: cleanedContent,
-        commentsSnapshot: pendingComments.map((c) => ({
-          id: c.id,
-          selected_text: c.selected_text,
-          category: c.category,
-          severity: c.severity,
-          feedback: c.feedback,
-        })),
+        revisedVersion: result.content,
+        commentsSnapshot: feedbackItems,
         revisionType: 'feedback',
         articleContext: {
           title,
@@ -638,30 +593,30 @@ Revised HTML:`
           comment_count: pendingComments.length,
           categories_addressed: [...new Set(pendingComments.map(c => c.category))],
           severities_addressed: [...new Set(pendingComments.map(c => c.severity))],
+          // Track which method was used for each feedback item
+          revision_methods: result.results.map(r => ({ id: r.id, method: r.method })),
         },
-        promptUsed: prompt,
-        validationResult, // Store validation result with the revision
       })
 
-      // BUG #2 FIX: Instead of auto-applying, set pending revision for user approval
-      // This allows the user to review the AI changes before accepting them
+      // Set pending revision for user approval
       setPendingRevision({
         previousContent: content,
-        revisedContent: cleanedContent,
-        feedbackItems: pendingComments.map(c => ({
-          id: c.id,
-          selected_text: c.selected_text,
-          category: c.category,
-          severity: c.severity,
-          feedback: c.feedback,
-        })),
+        revisedContent: result.content,
+        feedbackItems,
         revisionData,
         validationResult,
+        revisionResults: result.results, // Include detailed results
         timestamp: new Date().toISOString(),
       })
 
       setRevisionProgress('')
-      toast.info('AI revision ready for review. Please approve or reject the changes.', { title: 'Review Required' })
+
+      // Show appropriate message based on results
+      if (result.failCount === 0) {
+        toast.success(`All ${result.successCount} change(s) applied. Review and approve below.`, { title: 'Revision Complete' })
+      } else {
+        toast.warning(`${result.successCount} succeeded, ${result.failCount} failed. Review below.`, { title: 'Partial Revision' })
+      }
 
     } catch (error) {
       console.error('AI revision failed:', error)
