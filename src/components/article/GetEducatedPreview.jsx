@@ -110,11 +110,17 @@ const GetEducatedPreview = forwardRef(function GetEducatedPreview(
         .ge-article-content a {
           color: #007bff;
           text-decoration: none;
+          cursor: pointer;
         }
 
         .ge-article-content a:hover {
           color: #0056b3;
           text-decoration: underline;
+        }
+
+        /* Ensure links are clickable in preview */
+        .ge-article-content a[href] {
+          pointer-events: auto;
         }
 
         /* Lists */
@@ -450,6 +456,18 @@ const GetEducatedPreview = forwardRef(function GetEducatedPreview(
           className="ge-article-content"
           dangerouslySetInnerHTML={{ __html: content }}
           onClick={(e) => {
+            // Handle link clicks - open in new tab
+            const link = e.target.closest('a[href]')
+            if (link) {
+              e.preventDefault()
+              const href = link.getAttribute('href')
+              if (href) {
+                window.open(href, '_blank', 'noopener,noreferrer')
+              }
+              return
+            }
+
+            // Handle mark clicks for comments
             if (onMarkClick) {
               const mark = e.target.closest('mark[data-comment-id]')
               if (mark) {
