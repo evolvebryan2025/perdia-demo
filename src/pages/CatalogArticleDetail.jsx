@@ -208,19 +208,47 @@ export default function CatalogArticleDetail() {
               {article.title}
             </h1>
             <div className="flex items-center gap-3 mt-2">
-              <a
-                href={article.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
-              >
-                {article.url}
-                <ExternalLink className="w-3 h-3" />
-              </a>
+              {article.url ? (
+                <a
+                  href={article.url.startsWith('http') ? article.url : `https://${article.url}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
+                >
+                  {article.url}
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              ) : (
+                <span className="text-gray-400 text-sm">No live URL available</span>
+              )}
             </div>
           </div>
 
           <div className="flex gap-2">
+            {/* View Live Button */}
+            {article.url ? (
+              <Button
+                variant="default"
+                className="gap-2 bg-green-600 hover:bg-green-700"
+                onClick={() => {
+                  const url = article.url.startsWith('http') ? article.url : `https://${article.url}`
+                  window.open(url, '_blank')
+                }}
+              >
+                <ExternalLink className="w-4 h-4" />
+                View Live
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                className="gap-2 cursor-not-allowed opacity-60"
+                disabled
+                title="No live URL available for this article"
+              >
+                <ExternalLink className="w-4 h-4" />
+                View Live
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => setIsRevisionDialogOpen(true)}
