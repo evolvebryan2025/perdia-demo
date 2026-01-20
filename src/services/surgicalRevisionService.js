@@ -11,7 +11,9 @@
  * 4. Validate each change was actually made
  */
 
-import ClaudeClient from './ai/claudeClient'
+// Use Edge Function client for secure server-side API calls
+// API keys are stored in Supabase secrets, not exposed to browser
+import ClaudeClient from './ai/claudeClient.edge'
 
 class SurgicalRevisionService {
   constructor() {
