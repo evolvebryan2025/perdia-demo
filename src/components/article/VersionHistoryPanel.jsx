@@ -153,10 +153,32 @@ function VersionFeedback({ versionId, initialNotes, onSave }) {
     onSave?.(updatedItems.length > 0 ? JSON.stringify(updatedItems) : '')
   }
 
+  // Type config with explicit Tailwind classes (dynamic class names don't work at build time)
   const typeConfig = {
-    note: { icon: MessageSquare, color: 'blue', label: 'Note' },
-    issue: { icon: AlertCircle, color: 'red', label: 'Issue' },
-    suggestion: { icon: Lightbulb, color: 'amber', label: 'Suggestion' },
+    note: {
+      icon: MessageSquare,
+      label: 'Note',
+      bgClass: 'bg-blue-50 border border-blue-200',
+      iconClass: 'text-blue-600',
+      textClass: 'text-blue-800',
+      activeClass: 'bg-blue-100 text-blue-700 border border-blue-300',
+    },
+    issue: {
+      icon: AlertCircle,
+      label: 'Issue',
+      bgClass: 'bg-red-50 border border-red-200',
+      iconClass: 'text-red-600',
+      textClass: 'text-red-800',
+      activeClass: 'bg-red-100 text-red-700 border border-red-300',
+    },
+    suggestion: {
+      icon: Lightbulb,
+      label: 'Suggestion',
+      bgClass: 'bg-amber-50 border border-amber-200',
+      iconClass: 'text-amber-600',
+      textClass: 'text-amber-800',
+      activeClass: 'bg-amber-100 text-amber-700 border border-amber-300',
+    },
   }
 
   return (
@@ -172,12 +194,12 @@ function VersionFeedback({ versionId, initialNotes, onSave }) {
                 key={item.id || idx}
                 className={cn(
                   'p-2 rounded-md text-sm flex items-start gap-2 group',
-                  `bg-${config.color}-50 border border-${config.color}-200`
+                  config.bgClass
                 )}
               >
-                <IconComponent className={cn('w-4 h-4 mt-0.5 flex-shrink-0', `text-${config.color}-600`)} />
+                <IconComponent className={cn('w-4 h-4 mt-0.5 flex-shrink-0', config.iconClass)} />
                 <div className="flex-1 min-w-0">
-                  <p className={cn('text-sm', `text-${config.color}-800`)}>{item.text}</p>
+                  <p className={cn('text-sm', config.textClass)}>{item.text}</p>
                   {item.date && (
                     <p className="text-xs text-gray-400 mt-1">
                       {format(new Date(item.date), 'MMM d, h:mm a')}
@@ -207,7 +229,7 @@ function VersionFeedback({ versionId, initialNotes, onSave }) {
                 className={cn(
                   'px-2 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1',
                   feedbackType === type
-                    ? `bg-${config.color}-100 text-${config.color}-700 border border-${config.color}-300`
+                    ? config.activeClass
                     : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
                 )}
               >
