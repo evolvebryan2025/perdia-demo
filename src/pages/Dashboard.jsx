@@ -12,7 +12,7 @@ import { useSystemSettings } from '../hooks/useSystemSettings'
 import { useBulkAddToQueue } from '../hooks/useAutomation'
 import { useGenerationProgress } from '../contexts/GenerationProgressContext'
 import { differenceInDays, differenceInHours, isPast, subDays } from 'date-fns'
-import { Plus, Loader2, FileText, Clock, CheckCircle, AlertCircle, GripVertical, Sparkles, Search, Zap, Settings2, TrendingUp, ShieldCheck, AlertTriangle, Timer, DollarSign, BarChart3, UserCheck, Send } from 'lucide-react'
+import { Plus, Loader2, FileText, Clock, CheckCircle, AlertCircle, GripVertical, Sparkles, Search, Zap, Settings2, TrendingUp, ShieldCheck, AlertTriangle, Timer, DollarSign, BarChart3, UserCheck, Send, HelpCircle } from 'lucide-react'
 import SourceSelector from '../components/ideas/SourceSelector'
 import IdeaDiscoveryService from '../services/ideaDiscoveryService'
 import { useToast } from '../components/ui/toast'
@@ -1079,17 +1079,23 @@ function SortableArticleCard({ article, onClick, onStatusChange, onApprove, inde
           )}
 
           <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-500">{article.word_count || 0} words</span>
+            <span
+              className="text-gray-500 cursor-help"
+              title="Word Count: Total words in this article. Target: 1,500-2,500 words for optimal SEO."
+            >
+              {article.word_count || 0} words
+            </span>
             <div className="flex items-center gap-2">
               {article.quality_score > 0 && (
                 <motion.span
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
-                  className={`px-2 py-1 rounded ${
+                  className={`px-2 py-1 rounded cursor-help ${
                     article.quality_score >= 85 ? 'bg-green-100 text-green-700' :
                     article.quality_score >= 75 ? 'bg-yellow-100 text-yellow-700' :
                     'bg-red-100 text-red-700'
                   }`}
+                  title={`Quality Score: ${article.quality_score}/100. Measures word count, internal links, external citations, FAQs, and readability. Green (85+) = Excellent, Yellow (75-84) = Good, Red (<75) = Needs improvement.`}
                 >
                   {article.quality_score}
                 </motion.span>

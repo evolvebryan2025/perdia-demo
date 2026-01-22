@@ -284,10 +284,18 @@ export function ProgressModal({
                 animate={{ opacity: 1, y: 0 }}
                 onClick={onCancel}
                 className="w-full py-3 rounded-lg font-medium transition-colors bg-red-600 hover:bg-red-700 text-white flex items-center justify-center gap-2"
+                title="Stop the current generation process. Any partial progress will be lost."
               >
                 <XCircle className="w-5 h-5" />
                 STOP
               </motion.button>
+            )}
+
+            {/* Running state info - show when no cancel button but still running */}
+            {!allowCancel && status === 'running' && (
+              <p className="text-xs text-center text-gray-500">
+                Process is running. You can close this window - the process will continue in the background.
+              </p>
             )}
 
             {/* Cancelled Message */}
@@ -312,8 +320,9 @@ export function ProgressModal({
                     ? 'bg-green-600 hover:bg-green-700 text-white'
                     : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                 }`}
+                title={status === 'completed' ? 'Process completed successfully. Click to close this window.' : 'Close this window.'}
               >
-                {status === 'completed' ? 'Done' : 'Close'}
+                {status === 'completed' ? 'Done - Close Window' : 'Close'}
               </motion.button>
             )}
           </div>
