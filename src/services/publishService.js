@@ -1,9 +1,9 @@
 /**
  * Publishing Service for GetEducated
- * Handles publishing articles via webhook (temporary) and WordPress API (future)
+ * Handles publishing articles via WordPress REST API or webhook fallback
  *
- * Current Implementation: POST to n8n webhook
- * Future: Direct WordPress REST API integration
+ * Primary: Direct WordPress REST API with Application Password auth
+ * Fallback: POST to n8n webhook (legacy)
  *
  * IMPORTANT: This service enforces pre-publish validation including:
  * - Monetization shortcode requirements
@@ -15,6 +15,7 @@
 import { supabase } from './supabaseClient'
 import { validateForPublish, validateForPublishAsync } from './validation/prePublishValidation'
 import { AUTHOR_DISPLAY_NAMES } from '../hooks/useContributors'
+import WordPressClient, { WORDPRESS_CONTRIBUTOR_IDS } from './wordpressClient'
 
 // Webhook endpoints for n8n WordPress publishing
 // Use environment variables with fallback to development URL
@@ -83,7 +84,109 @@ async function applyRateLimiting() {
 }
 
 /**
- * Publish an article via webhook
+ * Publish an article via WordPress REST API (preferred method)
+ * @param {Object} article - The article to publish
+ * @param {Object} options - Publishing options
+ * @returns {Object} Result with success status and details
+ */
+export async function publishToWordPress(article, options = {}) {
+  const {
+    status = 'draft',
+    validateFirst = true,
+    updateDatabase = true,
+    environment = DEFAULT_ENVIRONMENT,
+    requireMonetization = true,
+    blockUnknownShortcodes = true,
+    useAsyncValidation = true,
+  } = options
+
+  // Run pre-publish validation
+  if (validateFirst) {
+    const validationOptions = {
+      requireMonetization,
+      blockUnknownShortcodes,
+    }
+
+    const validation = useAsyncValidation
+      ? await validateForPublishAsync(article, validationOptions)
+      : validateForPublish(article, validationOptions)
+
+    if (!validation.canPublish) {
+      return {
+        success: false,
+        error: 'Validation failed',
+        blockingIssues: validation.blockingIssues,
+        validation,
+        environment,
+        method: 'wordpress',
+      }
+    }
+  }
+
+  // Apply rate limiting
+  await applyRateLimiting()
+
+  try {
+    // Create WordPress client for the target environment
+    const wpClient = new WordPressClient({ environment })
+
+    // Publish via WordPress REST API
+    console.log(`[PublishService] Publishing to WordPress (${environment}): ${article.title}`)
+
+    const result = await wpClient.createPost(article, {
+      status: status === 'publish' ? 'publish' : 'draft',
+    })
+
+    // Update article in database
+    if (updateDatabase && result.success) {
+      const updateData = {
+        status: 'published',
+        published_at: new Date().toISOString(),
+        wordpress_post_id: result.post_id,
+        published_url: result.url,
+      }
+
+      const { error: updateError } = await supabase
+        .from('articles')
+        .update(updateData)
+        .eq('id', article.id)
+
+      if (updateError) {
+        console.error('Failed to update article status:', updateError)
+      }
+
+      // Sync to catalog for internal linking
+      if (result.url) {
+        await syncToGetEducatedCatalog(article, result.url)
+      }
+    }
+
+    return {
+      success: true,
+      method: 'wordpress',
+      articleId: article.id,
+      postId: result.post_id,
+      url: result.url,
+      contributorId: result.contributor_id,
+      contributorName: result.contributor_name,
+      publishedAt: new Date().toISOString(),
+      environment,
+    }
+
+  } catch (error) {
+    console.error('[PublishService] WordPress publishing error:', error)
+    return {
+      success: false,
+      method: 'wordpress',
+      error: error.message,
+      articleId: article.id,
+      environment,
+    }
+  }
+}
+
+/**
+ * Publish an article via webhook (legacy fallback)
  * @param {Object} article - The article to publish
  * @param {Object} options - Publishing options
  * @returns {Object} Result with success status and details
@@ -503,8 +606,61 @@ async function syncToGetEducatedCatalog(article, publishedUrl) {
   }
 }
 
+/**
+ * Smart publish - tries WordPress REST API first, falls back to webhook
+ * @param {Object} article - The article to publish
+ * @param {Object} options - Publishing options
+ * @returns {Object} Result with success status and details
+ */
+export async function publish(article, options = {}) {
+  const { preferWebhook = false, ...rest } = options
+
+  // Check if WordPress credentials are configured
+  const hasWpCredentials = import.meta.env.VITE_WP_USERNAME && import.meta.env.VITE_WP_APP_PASSWORD
+
+  if (hasWpCredentials && !preferWebhook) {
+    // Try WordPress first
+    const wpResult = await publishToWordPress(article, rest)
+    if (wpResult.success) {
+      return wpResult
+    }
+
+    // Fall back to webhook on failure
+    console.warn('[PublishService] WordPress failed, falling back to webhook:', wpResult.error)
+  }
+
+  // Use webhook (legacy or fallback)
+  return publishArticle(article, rest)
+}
+
+/**
+ * Test WordPress connection
+ * @param {string} environment - 'staging' or 'production'
+ * @returns {Object} Connection test result
+ */
+export async function testWordPressConnection(environment = 'staging') {
+  const wpClient = new WordPressClient({ environment })
+  return wpClient.testConnection()
+}
+
+/**
+ * Get WordPress contributor ID for an author
+ * @param {string} authorName - Author name or alias
+ * @param {string} environment - 'staging' or 'production'
+ * @returns {number|null} WordPress CPT ID
+ */
+export function getWordPressContributorId(authorName, environment = 'staging') {
+  const ids = WORDPRESS_CONTRIBUTOR_IDS[environment] || WORDPRESS_CONTRIBUTOR_IDS.staging
+  const displayName = AUTHOR_DISPLAY_NAMES[authorName] || authorName
+  return ids[displayName] || ids[authorName] || null
+}
+
 export default {
-  publishArticle,
+  // Primary publishing methods
+  publish,
+  publishToWordPress,
+  publishArticle,  // webhook-based (legacy)
+  // Utilities
   buildWebhookPayload,
   bulkPublish,
   throttledPublish,
@@ -512,6 +668,9 @@ export default {
   retryPublish,
   syncToGetEducatedCatalog,
   getWebhookUrl,
+  // WordPress helpers
+  testWordPressConnection,
+  getWordPressContributorId,
   // Environment constants
   WEBHOOK_URL_STAGING,
   WEBHOOK_URL_PRODUCTION,
