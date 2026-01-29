@@ -25,6 +25,13 @@ import { contentValidator, validateDraft, validateForPublish } from './validatio
 import { calculateQualityScore, getQualityThresholds, calculateQualityScoreAsync } from './qualityScoreService'
 import surgicalRevisionService from './surgicalRevisionService'
 import { validateContent, BLOCKED_COMPETITORS, ALLOWED_EXTERNAL_DOMAINS } from './validation/linkValidator'
+import {
+  extractSubjectArea,
+  extractDegreeLevel,
+  extractTopics,
+  filterRelevantArticles,
+  explainLinkSelections,
+} from './topicRelevanceService'
 
 class GenerationService {
   constructor() {
@@ -1384,6 +1391,9 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
 
   /**
    * Get relevant site articles for internal linking
+   * IMPROVED: Uses semantic subject/topic matching to avoid irrelevant links
+   * (e.g., prevents Digital Ministry articles from linking to AACSB MBA content)
+   *
    * Now uses the GetEducated catalog (geteducated_articles) for richer data
    * Falls back to legacy site_articles if GetEducated catalog is empty
    */
@@ -1391,27 +1401,68 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
     const { subjectArea, degreeLevel, excludeUrls = [] } = options
 
     try {
-      // Extract topics from article title for matching
-      const titleWords = articleTitle.toLowerCase().split(' ').filter(w => w.length > 3)
+      // Extract subject and degree level from title if not provided
+      const detectedSubject = subjectArea || extractSubjectArea(articleTitle)
+      const detectedLevel = degreeLevel || extractDegreeLevel(articleTitle)
+      const topics = extractTopics(articleTitle)
+
+      // Log what we detected for debugging
+      console.log(`[InternalLinking] Analyzing: "${articleTitle}"`)
+      console.log(`[InternalLinking] Detected subject: ${detectedSubject || 'unknown'}`)
+      console.log(`[InternalLinking] Detected degree level: ${detectedLevel || 'unknown'}`)
+      console.log(`[InternalLinking] Extracted topics: ${topics.join(', ')}`)
+
+      // Log for AI reasoning
+      this.logReasoning('internal_linking_analysis', {
+        title: articleTitle,
+        detected_subject: detectedSubject,
+        detected_degree_level: detectedLevel,
+        extracted_topics: topics,
+      })
 
       // First, try to use the SQL function for intelligent matching
       const { data: rpcData, error: rpcError } = await supabase.rpc('find_relevant_ge_articles', {
-        search_topics: titleWords,
-        search_subject: subjectArea || null,
-        search_degree_level: degreeLevel || null,
+        search_topics: topics,
+        search_subject: detectedSubject || null,
+        search_degree_level: detectedLevel || null,
         exclude_urls: excludeUrls,
         result_limit: limit,
       })
 
+      // Create source article object for relevance filtering
+      const sourceArticle = {
+        title: articleTitle,
+        subject_area: detectedSubject,
+        degree_level: detectedLevel,
+        topics: topics,
+      }
+
       if (!rpcError && rpcData && rpcData.length > 0) {
-        console.log(`[Generation] Found ${rpcData.length} relevant articles via SQL function`)
-        return rpcData.slice(0, 5).map(a => ({
-          id: a.id,
-          url: a.url,
-          title: a.title,
-          excerpt: a.excerpt,
-          topics: a.topics,
-        }))
+        console.log(`[InternalLinking] SQL function returned ${rpcData.length} candidates`)
+
+        // Apply improved relevance filtering
+        const relevantArticles = filterRelevantArticles(
+          sourceArticle,
+          rpcData.map(a => ({
+            id: a.id,
+            url: a.url,
+            title: a.title,
+            excerpt: a.excerpt,
+            topics: a.topics,
+            subject_area: a.subject_area,
+            degree_level: a.degree_level,
+          })),
+          { limit: 5, minScore: 30, requireSubjectMatch: !!detectedSubject }
+        )
+
+        if (relevantArticles.length > 0) {
+          // Log the selections for debugging
+          const explanation = explainLinkSelections(sourceArticle, relevantArticles)
+          console.log(`[InternalLinking] Selected ${relevantArticles.length} relevant articles`)
+          this.logReasoning('internal_link_selections', explanation)
+
+          return relevantArticles.map(item => item.article)
+        }
       }
 
       // Fallback: Direct query to geteducated_articles
@@ -1423,54 +1474,46 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
         .limit(limit * 2)
 
       if (!geError && geArticles && geArticles.length > 0) {
-        // Score articles by relevance
-        const scoredArticles = geArticles
-          .filter(a => !excludeUrls.includes(a.url))
-          .map(article => {
-            let score = 0
+        console.log(`[InternalLinking] Fallback query returned ${geArticles.length} candidates`)
 
-            const articleTitleWords = article.title.toLowerCase().split(' ')
-            const commonWords = titleWords.filter(word =>
-              articleTitleWords.some(aw => aw.includes(word))
-            )
-            score += commonWords.length * 10
+        // Filter out excluded URLs
+        const candidateArticles = geArticles.filter(a => !excludeUrls.includes(a.url))
 
-            // Topic matching (stronger signal)
-            if (article.topics && article.topics.length > 0) {
-              const topicMatches = article.topics.filter(topic =>
-                titleWords.some(word => topic.toLowerCase().includes(word))
-              )
-              score += topicMatches.length * 15
-            }
+        // Apply improved relevance filtering
+        const relevantArticles = filterRelevantArticles(
+          sourceArticle,
+          candidateArticles,
+          { limit: 5, minScore: 30, requireSubjectMatch: !!detectedSubject }
+        )
 
-            // Subject area bonus
-            if (subjectArea && article.subject_area === subjectArea) {
-              score += 20
-            }
+        if (relevantArticles.length > 0) {
+          const explanation = explainLinkSelections(sourceArticle, relevantArticles)
+          console.log(`[InternalLinking] Selected ${relevantArticles.length} relevant articles from fallback`)
+          this.logReasoning('internal_link_selections', explanation)
 
-            // Degree level bonus
-            if (degreeLevel && article.degree_level === degreeLevel) {
-              score += 15
-            }
+          return relevantArticles.map(item => item.article)
+        }
 
-            return { article, score }
-          })
+        // If strict filtering returned nothing, try with relaxed settings
+        console.log('[InternalLinking] Strict filtering returned no results, trying relaxed mode')
+        const relaxedArticles = filterRelevantArticles(
+          sourceArticle,
+          candidateArticles,
+          { limit: 5, minScore: 10, requireSubjectMatch: false }
+        )
 
-        scoredArticles.sort((a, b) => b.score - a.score)
-
-        const results = scoredArticles
-          .filter(a => a.score > 0)
-          .slice(0, 5)
-          .map(a => a.article)
-
-        if (results.length > 0) {
-          console.log(`[Generation] Found ${results.length} relevant articles from GetEducated catalog`)
-          return results
+        if (relaxedArticles.length > 0) {
+          this.logReasoningWarning(
+            'internal_linking',
+            'Used relaxed relevance filtering - subject matching was disabled',
+            'medium'
+          )
+          return relaxedArticles.map(item => item.article)
         }
       }
 
       // Final fallback: Legacy site_articles table
-      console.log('[Generation] Falling back to legacy site_articles table')
+      console.log('[InternalLinking] Falling back to legacy site_articles table')
       const { data: legacyArticles, error: legacyError } = await supabase
         .from('site_articles')
         .select('*')
@@ -1479,34 +1522,33 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
 
       if (legacyError) throw legacyError
 
-      const scoredLegacy = (legacyArticles || []).map(article => {
-        let score = 0
+      // Apply relevance filtering to legacy articles
+      const relevantLegacy = filterRelevantArticles(
+        sourceArticle,
+        legacyArticles || [],
+        { limit: 5, minScore: 10, requireSubjectMatch: false }
+      )
 
-        const articleTitleWords = article.title.toLowerCase().split(' ')
-        const commonWords = titleWords.filter(word =>
-          articleTitleWords.some(aw => aw.includes(word))
+      if (relevantLegacy.length > 0) {
+        this.logReasoningWarning(
+          'internal_linking',
+          'Used legacy site_articles table - GetEducated catalog may be empty',
+          'low'
         )
-        score += commonWords.length * 10
+        return relevantLegacy.map(item => item.article)
+      }
 
-        if (article.topics && article.topics.length > 0) {
-          const topicMatches = article.topics.filter(topic =>
-            titleWords.some(word => topic.toLowerCase().includes(word))
-          )
-          score += topicMatches.length * 15
-        }
-
-        return { article, score }
-      })
-
-      scoredLegacy.sort((a, b) => b.score - a.score)
-
-      return scoredLegacy
-        .filter(a => a.score > 0)
-        .slice(0, 5)
-        .map(a => a.article)
+      console.warn('[InternalLinking] No relevant articles found for internal linking')
+      this.logReasoningWarning(
+        'internal_linking',
+        'No relevant articles found - internal links will not be added',
+        'high'
+      )
+      return []
 
     } catch (error) {
       console.error('Error fetching site articles:', error)
+      this.logReasoningWarning('internal_linking', `Error: ${error.message}`, 'high')
       return []
     }
   }
@@ -1540,17 +1582,38 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
 
   /**
    * Add internal links to content using Claude
+   * IMPROVED: More explicit relevance requirements to prevent irrelevant links
    */
   async addInternalLinksToContent(content, siteArticles) {
-    const prompt = `Add 3-5 contextual internal links to this article content.
+    // Build article list with subject info for the AI
+    const articleList = siteArticles.map(a => {
+      const subject = a.subject_area || extractSubjectArea(a.title)
+      const subjectInfo = subject ? ` [${subject}]` : ''
+      return `- [${a.title}](${a.url})${subjectInfo}`
+    }).join('\n')
+
+    const prompt = `Add EXACTLY 3 contextual internal links to this article content.
 
 ARTICLE CONTENT:
 ${content}
 
-AVAILABLE ARTICLES TO LINK TO:
-${siteArticles.map(a => `- [${a.title}](${a.url})`).join('\n')}
+AVAILABLE ARTICLES TO LINK TO (pre-filtered for relevance):
+${articleList}
 
-=== CRITICAL LINKING RULES ===
+=== CRITICAL RELEVANCE RULES ===
+
+These articles have been pre-filtered to match this article's subject area.
+ONLY add links that make SEMANTIC SENSE in context:
+- The linked article's topic must directly relate to the sentence where you add the link
+- Don't force links - if no article fits naturally in a section, skip that section
+- A link about "MBA programs" should NOT appear in content about "ministry" or "teaching"
+- A link about "nursing degrees" should NOT appear in content about "business" or "engineering"
+
+BEFORE adding each link, ask yourself:
+"Would a reader clicking this link expect content related to what they're reading?"
+If NO, do not add that link.
+
+=== STRICT URL RULES ===
 
 ONLY USE URLs FROM THE "AVAILABLE ARTICLES" LIST ABOVE.
 DO NOT add ANY external links. This task is ONLY for internal GetEducated links.
@@ -1560,11 +1623,10 @@ NEVER link to these competitor domains (STRICTLY FORBIDDEN):
 - onlineu.com, usnews.com, bestcolleges.com, niche.com
 - affordablecollegesonline.com, petersons.com, princetonreview.com
 - collegeconfidential.com, cappex.com, collegeraptor.com
-- collegesimply.com, graduateguide.com, gradschools.com, collegexpress.com
 
-NEVER link to .edu domains directly. Use GetEducated school pages instead.
+NEVER link to .edu domains directly.
 
-=== CRITICAL HTML FORMATTING RULES ===
+=== HTML FORMATTING RULES ===
 
 Your output MUST be properly formatted HTML with:
 1. <h2> tags for major section headings
@@ -1575,20 +1637,18 @@ Your output MUST be properly formatted HTML with:
 6. <strong> or <b> tags for bold text
 7. <a href="..."> tags for any links
 
-NEVER output plain text without HTML tags. Every paragraph MUST be wrapped in <p> tags.
+=== INSTRUCTIONS ===
 
-=== END HTML FORMATTING RULES ===
-
-INSTRUCTIONS:
-1. Add links ONLY where genuinely relevant to the surrounding text
-2. Use natural anchor text (1-5 words from existing text)
-3. Distribute throughout article
-4. Use HTML format: <a href="URL">anchor text</a>
-5. Aim for 3-5 links total
+1. Add EXACTLY 3 internal links (no more, no fewer)
+2. Each link MUST be contextually relevant to the surrounding sentence
+3. Use natural anchor text (1-5 words from existing text)
+4. Distribute links throughout the article (not all in one section)
+5. Use HTML format: <a href="URL">anchor text</a>
 6. Preserve all existing HTML formatting
-7. VERIFY each URL exists in the AVAILABLE ARTICLES list before using it
+7. VERIFY each URL exists in the AVAILABLE ARTICLES list
 
-OUTPUT ONLY THE UPDATED HTML CONTENT with links added.`
+OUTPUT ONLY THE UPDATED HTML CONTENT with exactly 3 links added.
+Do not include any explanation or commentary.`
 
     try {
       const linkedContent = await this.claude.chat([
@@ -1597,9 +1657,16 @@ OUTPUT ONLY THE UPDATED HTML CONTENT with links added.`
           content: prompt
         }
       ], {
-        temperature: 0.7,
+        temperature: 0.5, // Lower temperature for more consistent output
         max_tokens: 4500,
       })
+
+      // Validate that links were actually added
+      const linkCount = (linkedContent.match(/<a\s+href=/gi) || []).length
+      if (linkCount < 3) {
+        console.warn(`[InternalLinking] Only ${linkCount} links added, expected 3`)
+        this.logReasoningWarning('internal_linking', `Only ${linkCount}/3 links added`, 'medium')
+      }
 
       return linkedContent
 
@@ -2569,17 +2636,37 @@ OUTPUT ONLY THE HUMANIZED HTML CONTENT.`
    * @returns {string} - Updated content
    */
   async addInternalLinksToContentPreserving(content, siteArticles, linksToAdd = 3) {
-    const prompt = `Add ${linksToAdd} contextual internal links to this article.
+    // Build article list with subject info for the AI
+    const articleList = siteArticles.slice(0, 10).map(a => {
+      const subject = a.subject_area || extractSubjectArea(a.title)
+      const subjectInfo = subject ? ` [${subject}]` : ''
+      return `- [${a.title}](${a.url})${subjectInfo}`
+    }).join('\n')
+
+    const prompt = `Add EXACTLY ${linksToAdd} contextual internal links to this article.
 
 IMPORTANT: Only add links where they naturally fit. Do NOT rewrite any prose.
 
 ARTICLE CONTENT:
 ${content}
 
-AVAILABLE ARTICLES TO LINK TO (pick ${linksToAdd} most relevant):
-${siteArticles.slice(0, 10).map(a => `- [${a.title}](${a.url})`).join('\n')}
+AVAILABLE ARTICLES TO LINK TO (pre-filtered for relevance):
+${articleList}
 
-=== CRITICAL LINKING RULES ===
+=== CRITICAL RELEVANCE RULES ===
+
+These articles have been pre-filtered to match this article's subject area.
+ONLY add links that make SEMANTIC SENSE in context:
+- The linked article's topic must directly relate to the sentence where you add the link
+- Don't force links - if no article fits naturally, skip that spot
+- A link about "MBA programs" should NOT appear in content about "ministry" or "teaching"
+- A link about "nursing degrees" should NOT appear in content about "business"
+
+BEFORE adding each link, ask yourself:
+"Would a reader clicking this link expect content related to what they're reading?"
+If NO, do not add that link.
+
+=== STRICT URL RULES ===
 
 ONLY USE URLs FROM THE "AVAILABLE ARTICLES" LIST ABOVE.
 DO NOT add ANY external links. This task is ONLY for internal GetEducated links.
@@ -2592,15 +2679,14 @@ NEVER link to these competitor domains (STRICTLY FORBIDDEN):
 
 NEVER link to .edu domains directly.
 
-=== END CRITICAL LINKING RULES ===
+=== RULES ===
 
-RULES:
 1. Add EXACTLY ${linksToAdd} links, no more, no fewer
-2. Use natural anchor text (1-5 words from existing text)
-3. Do NOT change any other text or structure
-4. Use HTML format: <a href="URL">existing text</a>
-5. Choose link placements that make sense contextually
-6. Distribute links throughout the article
+2. Each link MUST be contextually relevant to the surrounding sentence
+3. Use natural anchor text (1-5 words from existing text)
+4. Do NOT change any other text or structure
+5. Use HTML format: <a href="URL">existing text</a>
+6. Distribute links throughout the article (not all in one section)
 7. VERIFY each URL exists in the AVAILABLE ARTICLES list before using it
 
 OUTPUT ONLY THE UPDATED CONTENT with the ${linksToAdd} new links added.
@@ -2614,10 +2700,19 @@ Do not include any explanation or commentary.`
         max_tokens: 4500,
       })
 
+      // Validate link count
+      const linkCount = (linkedContent.match(/<a\s+href=/gi) || []).length
+      const originalLinkCount = (content.match(/<a\s+href=/gi) || []).length
+      const newLinks = linkCount - originalLinkCount
+
+      if (newLinks < linksToAdd) {
+        console.warn(`[InternalLinking] Only ${newLinks} new links added, expected ${linksToAdd}`)
+      }
+
       return linkedContent
 
     } catch (error) {
-      console.error('[Compliance] Error adding internal links:', error)
+      console.error('[InternalLinking] Error adding internal links:', error)
       return content // Return original on error
     }
   }

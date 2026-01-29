@@ -15,12 +15,80 @@
 // API keys are stored in Supabase secrets, not exposed to browser
 import ClaudeClient from './ai/claudeClient.edge'
 import { validateContent, BLOCKED_COMPETITORS, ALLOWED_EXTERNAL_DOMAINS } from './validation/linkValidator'
+import { supabase } from './supabaseClient'
+import {
+  extractSubjectArea,
+  extractDegreeLevel,
+  extractTopics,
+  filterRelevantArticles,
+} from './topicRelevanceService'
 
 class SurgicalRevisionService {
   constructor() {
     this.claudeClient = new ClaudeClient()
     // Track rejected links so AI knows what to avoid
     this.rejectedLinks = new Set()
+  }
+
+  /**
+   * Check if feedback is asking for an internal link to be added
+   */
+  isInternalLinkRequest(feedback) {
+    const patterns = [
+      /add\s+(?:an?\s+)?internal\s+link/i,
+      /hyperlink\s+to\s+(?:a\s+)?(?:page|article)\s+on\s+geteducated/i,
+      /link\s+to\s+(?:a\s+)?geteducated/i,
+      /add\s+(?:a\s+)?link\s+(?:to\s+)?(?:from\s+)?geteducated/i,
+      /internal\s+link\s+(?:from\s+)?geteducated/i,
+    ]
+    return patterns.some(p => p.test(feedback))
+  }
+
+  /**
+   * Fetch relevant GetEducated articles for internal linking
+   * Used when editorial feedback asks for an internal link
+   */
+  async fetchRelevantInternalLinks(articleTitle, content) {
+    try {
+      // Extract subject and topics from the article
+      const subject = extractSubjectArea(articleTitle) || extractSubjectArea(content.substring(0, 500))
+      const topics = extractTopics(articleTitle)
+
+      console.log(`[SurgicalRevision] Fetching internal links for subject: ${subject}`)
+
+      // Query the GetEducated catalog
+      const { data: geArticles, error } = await supabase
+        .from('geteducated_articles')
+        .select('id, url, title, excerpt, topics, subject_area, degree_level')
+        .not('content_text', 'is', null)
+        .order('times_linked_to', { ascending: true })
+        .limit(50)
+
+      if (error || !geArticles || geArticles.length === 0) {
+        console.warn('[SurgicalRevision] Could not fetch GetEducated articles:', error?.message)
+        return []
+      }
+
+      // Filter for relevance
+      const sourceArticle = {
+        title: articleTitle,
+        subject_area: subject,
+        topics: topics,
+      }
+
+      const relevantArticles = filterRelevantArticles(
+        sourceArticle,
+        geArticles,
+        { limit: 10, minScore: 20, requireSubjectMatch: !!subject }
+      )
+
+      console.log(`[SurgicalRevision] Found ${relevantArticles.length} relevant internal links`)
+      return relevantArticles.map(item => item.article)
+
+    } catch (error) {
+      console.error('[SurgicalRevision] Error fetching internal links:', error)
+      return []
+    }
   }
 
   /**
@@ -61,12 +129,18 @@ ${Array.from(this.rejectedLinks).slice(0, 10).join('\n')}`
   /**
    * Process all feedback items one at a time
    * Returns the revised content and a report of what was changed
+   * @param {string} content - The article content
+   * @param {Array} feedbackItems - Array of feedback items to process
+   * @param {Object} options - { onProgress, articleTitle }
    */
   async processAllFeedback(content, feedbackItems, options = {}) {
-    const { onProgress = () => {} } = options
+    const { onProgress = () => {}, articleTitle = '' } = options
 
     let currentContent = content
     const results = []
+
+    // Extract title from content if not provided
+    const title = articleTitle || this.extractTitleFromContent(content)
 
     for (let i = 0; i < feedbackItems.length; i++) {
       const item = feedbackItems[i]
@@ -77,7 +151,7 @@ ${Array.from(this.rejectedLinks).slice(0, 10).join('\n')}`
       })
 
       try {
-        const result = await this.processSingleFeedback(currentContent, item)
+        const result = await this.processSingleFeedback(currentContent, item, title)
         currentContent = result.content
         results.push({
           id: item.id,
@@ -109,8 +183,11 @@ ${Array.from(this.rejectedLinks).slice(0, 10).join('\n')}`
   /**
    * Process a single feedback item
    * Tries programmatic replacement first, falls back to AI
+   * @param {string} content - The article content
+   * @param {Object} feedbackItem - The feedback item to process
+   * @param {string} articleTitle - Optional article title for context
    */
-  async processSingleFeedback(content, feedbackItem) {
+  async processSingleFeedback(content, feedbackItem, articleTitle = '') {
     const { selected_text, comment, feedback } = feedbackItem
     const feedbackText = comment || feedback // Handle both field names
 
@@ -128,7 +205,27 @@ ${Array.from(this.rejectedLinks).slice(0, 10).join('\n')}`
     }
 
     // Step 2: Use AI for more complex changes
-    return await this.performAIRevision(content, selected_text, feedbackText)
+    return await this.performAIRevision(content, selected_text, feedbackText, articleTitle)
+  }
+
+  /**
+   * Extract article title from HTML content
+   * Looks for h1 or first h2 tag
+   */
+  extractTitleFromContent(content) {
+    if (!content) return ''
+
+    // Try to find h1 first
+    const h1Match = content.match(/<h1[^>]*>([^<]+)<\/h1>/i)
+    if (h1Match) return h1Match[1].trim()
+
+    // Fallback to first h2
+    const h2Match = content.match(/<h2[^>]*>([^<]+)<\/h2>/i)
+    if (h2Match) return h2Match[1].trim()
+
+    // Last resort: first 100 chars of text content
+    const textContent = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+    return textContent.substring(0, 100)
   }
 
   /**
@@ -270,14 +367,50 @@ ${Array.from(this.rejectedLinks).slice(0, 10).join('\n')}`
   /**
    * Perform AI-assisted revision for complex changes
    * Uses a MINIMAL prompt with very low temperature
+   * IMPROVED: Handles internal link requests by fetching relevant GetEducated articles
    */
-  async performAIRevision(content, selectedText, feedback) {
+  async performAIRevision(content, selectedText, feedback, articleTitle = '') {
     // Extract just the relevant section to minimize context
     const contextWindow = this.extractRelevantContext(content, selectedText)
 
     // Check if feedback is about links
     const isLinkFeedback = /link|url|source|cite|citation|href|competitor/i.test(feedback)
+    const isInternalLinkRequest = this.isInternalLinkRequest(feedback)
     const linkingRules = isLinkFeedback ? this.getLinkingRules() : ''
+
+    // If this is an internal link request, fetch relevant articles
+    let internalLinkSection = ''
+    if (isInternalLinkRequest) {
+      console.log('[SurgicalRevision] Detected internal link request, fetching relevant articles...')
+      const title = articleTitle || this.extractTitleFromContent(content)
+      const relevantArticles = await this.fetchRelevantInternalLinks(title, content)
+
+      if (relevantArticles.length > 0) {
+        internalLinkSection = `
+
+=== AVAILABLE GETEDUCATED INTERNAL LINKS ===
+These articles have been pre-filtered for relevance to this content.
+ONLY use links from this list - do not invent or guess URLs.
+
+${relevantArticles.map(a => {
+  const subject = a.subject_area || extractSubjectArea(a.title)
+  const subjectInfo = subject ? ` [${subject}]` : ''
+  return `- [${a.title}](${a.url})${subjectInfo}`
+}).join('\n')}
+
+IMPORTANT: Choose a link that is contextually relevant to the selected text.
+The link topic must make sense in the context of the sentence.
+=== END AVAILABLE LINKS ===
+`
+      } else {
+        console.warn('[SurgicalRevision] No relevant internal links found')
+        internalLinkSection = `
+
+NOTE: No relevant GetEducated articles were found for internal linking.
+If the feedback asks for an internal link, acknowledge this limitation.
+`
+      }
+    }
 
     const prompt = `You are making a single, precise edit to article content.
 
@@ -286,7 +419,7 @@ SELECTED TEXT TO MODIFY:
 
 EDITORIAL FEEDBACK:
 ${feedback}
-${linkingRules}
+${linkingRules}${internalLinkSection}
 
 SURROUNDING CONTEXT:
 ${contextWindow.context}
@@ -296,6 +429,7 @@ Replace or modify the SELECTED TEXT based on the editorial feedback.
 - Find "${selectedText}" in the context and apply the requested change
 - If feedback says to change/replace something, do exactly that replacement
 - If feedback suggests a correction, make that specific correction
+- If feedback asks for an internal link, use ONLY URLs from the AVAILABLE LINKS list above
 - If feedback asks for a credible source, use BLS.gov, ED.gov, or similar government sources
 - If you cannot find a credible source, rewrite the text to not require a citation
 - Keep everything else in the context EXACTLY the same
