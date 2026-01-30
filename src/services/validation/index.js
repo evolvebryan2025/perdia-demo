@@ -13,6 +13,8 @@ export {
   isGetEducatedRankingReport,
   getSchoolPageUrl,
   canPublish,
+  checkLinkStatus,        // FIX #4: HTTP status checking
+  validateLinksAreLive,   // FIX #4: Batch link liveness check
   BLOCKED_COMPETITORS,
   ALLOWED_EXTERNAL_DOMAINS,
 } from './linkValidator'
@@ -33,3 +35,13 @@ export {
   getValidationSummary,
   canAutoPublish,
 } from './prePublishValidation'
+
+// FIX #3: Fact Checking / Statistics Validation
+export {
+  extractStatistics,
+  validateStatistics,
+  checkCitationAuthority,
+  validateCostClaim,
+  validateContentStatistics,
+  AUTHORITATIVE_SOURCES,
+} from './factChecker'

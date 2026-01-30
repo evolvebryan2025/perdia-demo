@@ -60,7 +60,9 @@ import {
   getCategoryConfig,
 } from '@/hooks/useArticleComments'
 import { useCreateAIRevision } from '@/hooks/useAIRevisions'
-import surgicalRevisionService from '@/services/surgicalRevisionService'
+import ClaudeClient from '@/services/ai/claudeClient'
+import { processCommentsInBatches } from '@/services/multiCommentReviser'
+import { validateRevision, generateValidationSummary } from '@/utils/revisionValidator'
 import { cn } from '@/lib/utils'
 
 /**
@@ -391,6 +393,9 @@ export function CommentableArticle({
   onContentChange,
   onSave, // BUG #3 FIX: Optional callback to auto-save after approving revision
   className,
+  // FIX: Preview mode reverting - accept pendingRevision from parent
+  pendingRevision: parentPendingRevision = null,
+  onPendingRevisionChange = null,
 }) {
   const [selectedText, setSelectedText] = useState('')
   const [hasSelection, setHasSelection] = useState(false)
@@ -398,8 +403,12 @@ export function CommentableArticle({
   const [activeCommentId, setActiveCommentId] = useState(null)
   const [isRevising, setIsRevising] = useState(false)
   const [revisionProgress, setRevisionProgress] = useState('')
-  // Pending revision state for approve/reject workflow (Bug #2 fix - per Dec 22, 2025 meeting)
-  const [pendingRevision, setPendingRevision] = useState(null) // { previousContent, revisedContent, feedbackItems, revisionData, validationResult }
+  
+  // FIX: Preview mode reverting - Use parent state if provided, otherwise local
+  // This ensures pending revision persists when switching modes
+  const [localPendingRevision, setLocalPendingRevision] = useState(null)
+  const pendingRevision = onPendingRevisionChange ? parentPendingRevision : localPendingRevision
+  const setPendingRevision = onPendingRevisionChange || setLocalPendingRevision
 
   const { toast } = useToast()
 
@@ -533,56 +542,61 @@ export function CommentableArticle({
     // Could implement scroll-to-text functionality here if needed
   }
 
-  // Handle AI revision using surgical revision service
-  // Processes each feedback item one at a time for reliability
+  // Handle AI revision with validation
+  // FIX #5: Now uses batch processing for multiple comments
   const handleAIRevise = async () => {
     if (pendingComments.length === 0) return
 
     setIsRevising(true)
-    setRevisionProgress('Starting revision...')
+    setRevisionProgress('Analyzing feedback...')
 
     try {
-      // Format feedback items for the surgical revision service
-      const feedbackItems = pendingComments.map((c) => ({
+      // FIX #5: Use batch processing for reliable multi-comment handling
+      // This processes comments in groups of 3, validates each batch,
+      // and retries failed comments individually
+      const batchResult = await processCommentsInBatches({
+        content,
+        comments: pendingComments.map(c => ({
+          id: c.id,
+          selected_text: c.selected_text,
+          category: c.category,
+          severity: c.severity,
+          feedback: c.feedback,
+        })),
+        title,
+        focusKeyword,
+        contentType,
+        contributorName,
+        onProgress: (msg) => setRevisionProgress(msg),
+      })
+
+      const cleanedContent = batchResult.revisedContent
+
+      // Build validation result from batch processing
+      setRevisionProgress('Validating revision...')
+      const feedbackForValidation = pendingComments.map((c) => ({
         id: c.id,
-        selected_text: c.selected_text,
         comment: c.feedback,
+        selected_text: c.selected_text,
         category: c.category,
         severity: c.severity,
       }))
 
-      // Process each feedback item one at a time
-      const result = await surgicalRevisionService.processAllFeedback(
-        content,
-        feedbackItems,
-        {
-          onProgress: ({ current, total, message }) => {
-            setRevisionProgress(`${message} (${current}/${total})`)
-          },
-        }
-      )
-
-      console.log('[CommentableArticle] Surgical revision result:', result)
-
-      // Build validation result from the surgical revision results
-      const validationResult = {
-        items: result.results.map(r => ({
-          id: r.id,
-          status: r.success ? 'addressed' : 'failed',
-          evidence: r.changeDescription,
-          warnings: r.error ? [r.error] : [],
-        })),
-        addressedCount: result.successCount,
-        failedCount: result.failCount,
-        partialCount: 0,
-      }
+      const validationResult = validateRevision(content, cleanedContent, feedbackForValidation)
+      console.log('Revision validation result:', validationResult)
 
       setRevisionProgress('Saving revision...')
       const revisionData = await createAIRevision.mutateAsync({
         articleId,
         previousVersion: content,
-        revisedVersion: result.content,
-        commentsSnapshot: feedbackItems,
+        revisedVersion: cleanedContent,
+        commentsSnapshot: pendingComments.map((c) => ({
+          id: c.id,
+          selected_text: c.selected_text,
+          category: c.category,
+          severity: c.severity,
+          feedback: c.feedback,
+        })),
         revisionType: 'feedback',
         articleContext: {
           title,
@@ -593,29 +607,36 @@ export function CommentableArticle({
           comment_count: pendingComments.length,
           categories_addressed: [...new Set(pendingComments.map(c => c.category))],
           severities_addressed: [...new Set(pendingComments.map(c => c.severity))],
-          // Track which method was used for each feedback item
-          revision_methods: result.results.map(r => ({ id: r.id, method: r.method })),
         },
+        promptUsed: `[Batch Processing] ${batchResult.totalBatches} batch(es), ${batchResult.processedComments.length} addressed, ${batchResult.failedComments.length} failed, ${batchResult.retryCount} retries`,
+        validationResult, // Store validation result with the revision
+        batchProcessingDetails: batchResult.details, // FIX #5: Track batch processing info
       })
 
-      // Set pending revision for user approval
+      // BUG #2 FIX: Instead of auto-applying, set pending revision for user approval
+      // This allows the user to review the AI changes before accepting them
       setPendingRevision({
         previousContent: content,
-        revisedContent: result.content,
-        feedbackItems,
+        revisedContent: cleanedContent,
+        feedbackItems: pendingComments.map(c => ({
+          id: c.id,
+          selected_text: c.selected_text,
+          category: c.category,
+          severity: c.severity,
+          feedback: c.feedback,
+        })),
         revisionData,
         validationResult,
-        revisionResults: result.results, // Include detailed results
         timestamp: new Date().toISOString(),
       })
 
       setRevisionProgress('')
-
-      // Show appropriate message based on results
-      if (result.failCount === 0) {
-        toast.success(`All ${result.successCount} change(s) applied. Review and approve below.`, { title: 'Revision Complete' })
+      
+      // FIX #5: Notify about batch processing results
+      if (batchResult.failedComments.length > 0) {
+        toast.warning(`${batchResult.failedComments.length} comment(s) could not be addressed automatically. Please review and try again.`, { title: 'Partial Success' })
       } else {
-        toast.warning(`${result.successCount} succeeded, ${result.failCount} failed. Review below.`, { title: 'Partial Revision' })
+        toast.info('AI revision ready for review. Please approve or reject the changes.', { title: 'Review Required' })
       }
 
     } catch (error) {

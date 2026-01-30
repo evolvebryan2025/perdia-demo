@@ -243,7 +243,7 @@ OUTPUT ONLY THE CORRECTED HTML CONTENT. DO NOT include explanations or notes.`
       }
 
       case 'reviseWithFeedback': {
-        const { content, feedbackItems } = payload
+        const { content, feedbackItems, availableInternalLinks = [] } = payload
 
         if (!content || !feedbackItems || !Array.isArray(feedbackItems)) {
           throw new Error('Missing required parameters: content and feedbackItems (array)')
@@ -256,6 +256,42 @@ OUTPUT ONLY THE CORRECTED HTML CONTENT. DO NOT include explanations or notes.`
    Issue: ${item.comment}`
         }).join('\n\n')
 
+        // FIX #2: Include linking rules so AI doesn't suggest bad links
+        const linkingRules = `
+=== CRITICAL LINKING RULES (MUST FOLLOW) ===
+
+1. NEVER link directly to school websites (.edu domains)
+   - Instead, use GetEducated school profile pages: geteducated.com/online-schools/[school-name]/
+
+2. NEVER link to these COMPETITOR sites:
+   - onlineu.com, usnews.com, bestcolleges.com, niche.com
+   - collegeraptor.com, affordablecollegesonline.com
+   - collegeconfidential.com, petersons.com, princetonreview.com
+   - gradschools.com, collegexpress.com
+
+3. External links should ONLY go to:
+   - Bureau of Labor Statistics (bls.gov)
+   - Government sites (.gov)
+   - Nonprofit educational organizations
+   - Accreditation body sites (aacsb.edu, cacrep.org, etc.)
+
+4. For internal links, use GetEducated pages:
+   - geteducated.com/online-degrees/
+   - geteducated.com/online-schools/
+   - geteducated.com/online-college-ratings-and-rankings/
+
+5. If asked to add a link and you cannot find a valid source:
+   - Rewrite the sentence to remove the need for a citation
+   - Do NOT invent URLs or use blocked sources
+
+=== END LINKING RULES ===
+`
+
+        // If internal link suggestions were provided, include them
+        const internalLinkContext = availableInternalLinks.length > 0
+          ? `\nAVAILABLE INTERNAL LINKS (use these for internal linking requests):\n${availableInternalLinks.map((a: any) => `- [${a.title}](${a.url})`).join('\n')}\n`
+          : ''
+
         const prompt = `You are a content editor revising this article based on editorial feedback.
 
 CURRENT CONTENT:
@@ -263,7 +299,7 @@ ${content}
 
 EDITORIAL FEEDBACK:
 ${feedbackText}
-
+${linkingRules}${internalLinkContext}
 === CRITICAL HTML FORMATTING RULES ===
 
 Your output MUST be properly formatted HTML with:
@@ -286,6 +322,7 @@ INSTRUCTIONS:
 3. Maintain the overall structure and tone
 4. Keep all other content unchanged
 5. Preserve HTML formatting and ensure ALL new content is properly HTML formatted
+6. STRICTLY follow the linking rules above - never link to competitors or .edu sites
 
 OUTPUT ONLY THE REVISED HTML CONTENT.`
 

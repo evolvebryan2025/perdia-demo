@@ -152,8 +152,7 @@ You MUST follow these rules to avoid generating fabricated content:
 3. NEVER FABRICATE SCHOOL NAMES:
    - NEVER invent school names or use placeholder names like "University A, B, C"
    - NEVER use template markers like "[School Name]" or "[University]"
-   - EXCEPTION: If USER-SPECIFIED CONTEXT section is provided below, those schools ARE verified and SHOULD be mentioned
-   - GOOD: Only mention schools if specific data is provided in the prompt, in USER-SPECIFIED CONTEXT, or use "many accredited online programs"
+   - GOOD: Only mention schools if specific data is provided in the prompt, or use "many accredited online programs"
 
 4. NEVER FABRICATE LEGISLATION:
    - NEVER cite specific bills (SB-1001, HB-123), acts, or legal codes unless provided
@@ -182,11 +181,10 @@ interface DraftOptions {
   authorProfile?: string | null
   authorName?: string | null
   contentRulesContext?: string | null
-  userSpecifiedContext?: string | null  // Schools, programs, or specific entities mentioned in the idea
 }
 
 function buildDraftPrompt(options: DraftOptions): string {
-  const { idea, contentType, targetWordCount, costDataContext, authorProfile, authorName, contentRulesContext, userSpecifiedContext } = options
+  const { idea, contentType, targetWordCount, costDataContext, authorProfile, authorName, contentRulesContext } = options
 
   let costDataSection = ''
   if (costDataContext) {
@@ -204,32 +202,52 @@ function buildDraftPrompt(options: DraftOptions): string {
     dynamicRulesSection = `\n${contentRulesContext}\n`
   }
 
-  // User-specified context (schools, programs, etc. from idea title/description)
-  // These are VERIFIED by the user and should be included in the article
-  let userContextSection = ''
-  if (userSpecifiedContext) {
-    userContextSection = `
-=== USER-SPECIFIED CONTEXT (VERIFIED - USE THESE) ===
-The following schools, programs, or entities were EXPLICITLY mentioned by the user in their content idea.
-These are VERIFIED and SHOULD be prominently featured in the article:
-
-${userSpecifiedContext}
-
-Write the article with a focus on these user-specified schools/programs. They are the main subject of this article.
-=== END USER-SPECIFIED CONTEXT ===
-`
+  // FIX: Ideas → Article Mismatch - Pass ALL relevant idea context
+  // The preview might show specific schools/info that must carry over to generation
+  const ideaContext = []
+  ideaContext.push(`Title: ${idea.title}`)
+  ideaContext.push(`Description: ${idea.description || 'Not provided'}`)
+  
+  // Add school/program specific context if available
+  if (idea.source_url) {
+    ideaContext.push(`Source: ${idea.source_url}`)
+  }
+  if (idea.monetization_category) {
+    ideaContext.push(`Category: ${idea.monetization_category}`)
+  }
+  if (idea.degree_level) {
+    ideaContext.push(`Degree Level: ${idea.degree_level}`)
+  }
+  if (idea.keyword_research_data?.primary_keyword) {
+    ideaContext.push(`Primary Keyword: ${idea.keyword_research_data.primary_keyword}`)
+  }
+  if (idea.seed_topics?.length) {
+    ideaContext.push(`Topics to cover: ${idea.seed_topics.join(', ')}`)
+  }
+  if (idea.target_keywords?.length) {
+    ideaContext.push(`Target Keywords: ${idea.target_keywords.join(', ')}`)
+  }
+  if (idea.trending_reason) {
+    ideaContext.push(`Trending Reason: ${idea.trending_reason}`)
+  }
+  if (idea.search_intent) {
+    ideaContext.push(`Search Intent: ${idea.search_intent}`)
+  }
+  // CRITICAL: If the idea mentions specific schools, they MUST appear in the article
+  if (idea.school_names?.length) {
+    ideaContext.push(`FEATURED SCHOOLS (must be mentioned): ${idea.school_names.join(', ')}`)
+  }
+  if (idea.sponsored_school_count) {
+    ideaContext.push(`Sponsored Schools: ${idea.sponsored_school_count} schools have listings for this topic`)
   }
 
   return `Generate a comprehensive ${contentType} article based on this content idea for GetEducated.com, an online education resource.
 
 ${ANTI_HALLUCINATION_RULES}
-${userContextSection}${costDataSection}${authorSection}
+${costDataSection}${authorSection}
 
 CONTENT IDEA:
-Title: ${idea.title}
-Description: ${idea.description || 'Not provided'}
-${idea.keyword_research_data ? `Primary Keyword: ${idea.keyword_research_data.primary_keyword}` : ''}
-${idea.seed_topics ? `Topics to cover: ${idea.seed_topics.join(', ')}` : ''}
+${ideaContext.join('\n')}
 
 REQUIREMENTS:
 - Target word count: ${targetWordCount} words
@@ -396,7 +414,6 @@ serve(async (req) => {
           authorProfile = null,
           authorName = null,
           contentRulesContext = null,
-          userSpecifiedContext = null,
         } = payload
 
         if (!idea) {
@@ -413,7 +430,6 @@ serve(async (req) => {
           authorProfile,
           authorName,
           contentRulesContext,
-          userSpecifiedContext,
         })
 
         // Build system prompt with optional author profile

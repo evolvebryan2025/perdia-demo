@@ -140,51 +140,37 @@ export function useAutoFixQuality() {
 
 /**
  * Revise article with editorial feedback
- * Uses surgical revision service for precise, targeted edits
- * Processes feedback one-at-a-time with programmatic replacement for simple changes
- *
- * REFACTORED: Now uses surgicalRevisionService for reliable edits
- * - Simple patterns (change X to Y) handled programmatically (no AI)
- * - Complex changes use minimal AI prompts with very low temperature
- * - Word count validation to prevent catastrophic data loss
+ * Enhanced with validation to ensure AI actually addressed feedback items
+ * Per GetEducated issue report - addresses Issues 5 & 6 (edits not sticking, missing links)
  */
 export function useReviseArticle() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async ({ articleId, content, feedbackItems }) => {
-      console.log(`[useReviseArticle] Starting surgical revision with ${feedbackItems.length} feedback items`)
-
-      // Strip images from content before processing
+      // Strip images from content before sending to AI
+      // Per Bug #3: Prevents logos/images from appearing in AI-revised content
       const contentWithoutImages = stripImagesFromHtml(content)
 
-      // Use generationService which wraps surgicalRevisionService
-      // Request full result for detailed tracking
-      const result = await generationService.reviseWithFeedback(
+      // Use Claude to revise based on feedback
+      const revisedContent = await generationService.claude.reviseWithFeedback(
         contentWithoutImages,
-        feedbackItems,
-        { returnFullResult: true }
+        feedbackItems
       )
 
-      console.log(`[useReviseArticle] Revision complete: ${result.successCount} succeeded, ${result.failCount} failed`)
+      // Import validation dynamically to avoid circular dependencies
+      const { validateRevision, generateValidationSummary } = await import('../utils/revisionValidator')
 
-      // Build validation result from surgical service results
-      const validation = {
-        items: result.results.map(r => ({
-          id: r.id,
-          status: r.success ? 'addressed' : 'failed',
-          evidence: r.changeDescription ? [r.changeDescription] : [],
-          warnings: r.error ? [r.error] : [],
-        })),
-        successCount: result.successCount,
-        failCount: result.failCount,
-      }
+      // Validate that the AI actually made the requested changes
+      const validation = validateRevision(content, revisedContent, feedbackItems)
+
+      console.log('[useReviseArticle] Validation result:', validation)
 
       // Update article with revised content and mark as revision
       const { data, error } = await supabase
         .from('articles')
         .update({
-          content: result.content,
+          content: revisedContent,
           is_revision: true  // Mark as revised so it shows in Revised tab
         })
         .eq('id', articleId)
@@ -193,7 +179,7 @@ export function useReviseArticle() {
 
       if (error) throw error
 
-      // Update feedback items based on results
+      // Update feedback items based on validation results
       for (const item of validation.items) {
         const updateData = {
           ai_revised: true,
@@ -202,13 +188,16 @@ export function useReviseArticle() {
           ai_validation_warnings: item.warnings.join('; ') || null,
         }
 
-        // Only mark as 'addressed' if revision succeeded
+        // Only mark as 'addressed' if validation passed
         if (item.status === 'addressed') {
           updateData.status = 'addressed'
-        } else {
-          // Mark for manual review
+        } else if (item.status === 'failed') {
+          // Keep status as 'pending' but mark that AI attempted revision
           updateData.status = 'pending_review'
           updateData.ai_revision_failed = true
+        } else {
+          // Partial - mark for manual review
+          updateData.status = 'pending_review'
         }
 
         await supabase
@@ -221,7 +210,7 @@ export function useReviseArticle() {
       return {
         ...data,
         validationResult: validation,
-        validationSummary: `${result.successCount} of ${feedbackItems.length} changes applied successfully`,
+        validationSummary: generateValidationSummary(validation),
       }
     },
     onSuccess: (data) => {
@@ -258,34 +247,99 @@ export function useHumanizeContent() {
 }
 
 /**
- * Revise content based on feedback comments (general feedback without text selections)
+ * Revise content based on feedback comments
  * Per GetEducated spec section 8.3.3 - Article Review UI Requirements
- *
- * REFACTORED: Uses surgical revision service via generationService
- * - For feedback with specific text selections, uses programmatic replacement
- * - For general feedback (no selected text), uses AI with low temperature
+ * Bundles article text + comments as context and sends to AI for revision
  */
 export function useReviseWithFeedback() {
   return useMutation({
-    mutationFn: async ({ content, title, feedbackItems, contentType, focusKeyword }) => {
-      // Strip images from content before processing
+    mutationFn: async ({ content, title, feedbackItems, contentType, focusKeyword, topics = [] }) => {
+      // Strip images from content before sending to AI
+      // Per Bug #3: Prevents logos/images from appearing in AI-revised content
       const contentWithoutImages = stripImagesFromHtml(content)
 
-      // Transform feedbackItems to the format expected by surgicalRevisionService
-      // General feedback (no selected_text) will use AI path with low temperature
-      const normalizedItems = feedbackItems.map((item, index) => ({
-        id: `general-feedback-${index}`,
-        selected_text: item.selected_text || item.selectedText || '', // Empty for general feedback
-        comment: item.comment || item.feedback || '',
-        category: item.category,
-        severity: item.severity,
-      }))
+      // Format feedback items for the prompt
+      const feedbackText = feedbackItems
+        .map((item, i) => `${i + 1}. ${item.comment}`)
+        .join('\n')
 
-      // Use generationService's surgical revision
-      const revisedContent = await generationService.reviseWithFeedback(
-        contentWithoutImages,
-        normalizedItems
-      )
+      // FIX #2: Check if any feedback is about links
+      const feedbackLower = feedbackText.toLowerCase()
+      const isLinkRelated = feedbackLower.includes('link') || 
+                           feedbackLower.includes('source') || 
+                           feedbackLower.includes('cite') ||
+                           feedbackLower.includes('reference')
+
+      // If link-related, fetch relevant internal links
+      let internalLinkContext = ''
+      if (isLinkRelated) {
+        try {
+          const relevantArticles = await generationService.getRelevantSiteArticles(title, 10, { topics })
+          if (relevantArticles.length > 0) {
+            internalLinkContext = `\nAVAILABLE INTERNAL LINKS (use these for internal linking):\n${relevantArticles.map(a => `- [${a.title}](${a.url})`).join('\n')}\n`
+          }
+        } catch (e) {
+          console.warn('[useReviseWithFeedback] Could not fetch internal links:', e)
+        }
+      }
+
+      // FIX #2: Always include linking rules to prevent AI suggesting bad links
+      const linkingRules = `
+=== CRITICAL LINKING RULES (MUST FOLLOW) ===
+
+1. NEVER link directly to school websites (.edu domains)
+   - Instead, link to GetEducated school pages: geteducated.com/online-schools/
+
+2. NEVER link to COMPETITOR sites:
+   - onlineu.com, usnews.com, bestcolleges.com, niche.com
+   - collegeraptor.com, affordablecollegesonline.com
+   - collegeconfidential.com, petersons.com, princetonreview.com
+
+3. External links should ONLY go to:
+   - Bureau of Labor Statistics (bls.gov)
+   - Government sites (.gov)
+   - Nonprofit educational organizations
+
+4. If you cannot find a valid source, rewrite the sentence to not need a citation
+   - Do NOT invent URLs or use blocked sources
+
+=== END LINKING RULES ===
+`
+
+      const prompt = `You are revising an article based on editorial feedback.
+
+ARTICLE TITLE: ${title}
+CONTENT TYPE: ${contentType || 'guide'}
+FOCUS KEYWORD: ${focusKeyword || 'N/A'}
+
+EDITORIAL FEEDBACK TO ADDRESS:
+${feedbackText}
+${linkingRules}${internalLinkContext}
+CURRENT ARTICLE CONTENT:
+${contentWithoutImages}
+
+INSTRUCTIONS:
+1. Carefully address ALL the feedback items listed above
+2. Maintain the article's overall structure and tone
+3. Keep all existing HTML formatting intact
+4. Do not remove existing content unless specifically requested
+5. Make changes that directly respond to the feedback
+6. Ensure the article remains coherent and well-organized
+7. Keep the content length similar unless asked to expand/reduce
+8. STRICTLY follow the linking rules - never link to competitors or .edu sites
+
+OUTPUT ONLY THE COMPLETE REVISED HTML CONTENT (no explanations, no commentary).`
+
+      // Use Claude to revise with feedback
+      const revisedContent = await generationService.claude.chat([
+        {
+          role: 'user',
+          content: prompt
+        }
+      ], {
+        temperature: 0.7,
+        max_tokens: 4500,
+      })
 
       return { content: revisedContent }
     },

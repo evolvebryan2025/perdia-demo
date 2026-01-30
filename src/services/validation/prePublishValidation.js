@@ -22,6 +22,7 @@ import {
   SHORTCODE_TYPES,
   LEGACY_SHORTCODE_TAGS,
 } from '../shortcodeService'
+import { validateStatistics } from './factChecker'
 
 /**
  * Validation result structure
@@ -38,6 +39,7 @@ const createValidationResult = () => ({
     risk: { passed: false, message: '' },
     quality: { passed: false, message: '' },
     content: { passed: false, message: '' },
+    statistics: { passed: false, message: '' }, // FIX #3: Fact checking
     shortcodes: { passed: false, message: '' },
     unknownShortcodes: { passed: false, message: '' },
     legacyShortcodes: { passed: false, message: '' },
@@ -187,6 +189,60 @@ export function validateForPublish(article, options = {}) {
         message: issue,
       })
     })
+  }
+
+  // 5b. FIX #3: Statistics/Fact Checking Validation
+  // Validates that statistics have proper citations from authoritative sources
+  if (article.content) {
+    const statsValidation = validateStatistics(article.content)
+    
+    if (statsValidation.uncitedStatistics === 0 && statsValidation.weakCitations === 0) {
+      result.checks.statistics.passed = true
+      result.checks.statistics.message = `${statsValidation.totalStatistics} statistics, all properly cited`
+    } else {
+      result.checks.statistics.passed = false
+      const issueCount = statsValidation.issues.length
+      const warningCount = statsValidation.warnings.length
+      result.checks.statistics.message = `${issueCount} uncited, ${warningCount} weak citations`
+      
+      // Add warnings for each uncited statistic
+      statsValidation.issues.forEach(issue => {
+        result.warnings.push({
+          type: 'uncited_statistic',
+          message: `Uncited: "${issue.statistic}" - ${issue.suggestion}`,
+          severity: issue.severity,
+        })
+      })
+      
+      // Add warnings for weak citations
+      statsValidation.warnings.forEach(warning => {
+        result.warnings.push({
+          type: 'weak_citation',
+          message: `Weak source for "${warning.statistic}": ${warning.reason}. ${warning.suggestion}`,
+        })
+      })
+      
+      // High-severity uncited statistics are blocking issues
+      const criticalUncited = statsValidation.issues.filter(i => i.severity === 'high')
+      if (criticalUncited.length > 0) {
+        result.blockingIssues.push({
+          type: 'uncited_critical_statistic',
+          message: `${criticalUncited.length} salary/cost claims without citations. These must be verified or removed.`,
+          details: criticalUncited.map(i => i.statistic),
+        })
+      }
+    }
+    
+    result.checks.statistics.details = {
+      total: statsValidation.totalStatistics,
+      cited: statsValidation.citedStatistics,
+      uncited: statsValidation.uncitedStatistics,
+      authoritative: statsValidation.authoritativeCitations,
+      score: statsValidation.score,
+    }
+  } else {
+    result.checks.statistics.passed = true
+    result.checks.statistics.message = 'No content to check'
   }
 
   // 6. Shortcode Validation (monetization)

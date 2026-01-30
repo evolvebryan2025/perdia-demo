@@ -132,6 +132,10 @@ function ArticleEditorContent() {
   // Compliance update state (per Dec 22, 2025 meeting - "Update" button)
   const [isUpdating, setIsUpdating] = useState(false)
   const [updateProgress, setUpdateProgress] = useState(null)
+  
+  // FIX: Preview mode reverting - Lift pendingRevision to parent
+  // This ensures revised content persists when switching between modes
+  const [pendingRevision, setPendingRevision] = useState(null)
 
   // Thumbs up/down feedback state (per Dec 22, 2025 meeting)
   const [showFeedbackDialog, setShowFeedbackDialog] = useState(false)
@@ -141,23 +145,17 @@ function ArticleEditorContent() {
   const [pendingRevision, setPendingRevision] = useState(null) // { previousContent, revisedContent, feedbackItems, timestamp }
 
   // Update local state when article loads
-  // BUG FIX: Don't overwrite content when there's a pending AI revision
-  // The pendingRevision contains the revised content that user is reviewing
   useEffect(() => {
     if (article) {
       setTitle(article.title || '')
-      // Only update content if there's no pending revision being reviewed
-      // This prevents React Query refetches from wiping out AI-revised content
-      if (!pendingRevision) {
-        setContent(article.content || '')
-      }
+      setContent(article.content || '')
       setMetaDescription(article.meta_description || '')
       setFocusKeyword(article.focus_keyword || '')
       setContentType(article.content_type || 'guide')
       setSelectedContributorId(article.contributor_id || null)
       setFaqs(article.faqs || [])
     }
-  }, [article, pendingRevision])
+  }, [article])
 
   // Calculate word count using TipTap helper
   const wordCount = useMemo(() => getWordCount(content), [content])
@@ -632,7 +630,7 @@ function ArticleEditorContent() {
   const currentStatus = STATUS_OPTIONS.find(s => s.value === article.status)
 
   return (
-    <div className="h-[calc(100vh-64px)] flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-gray-50">
       {/* Header */}
       <div className="border-b border-gray-200 bg-white px-4 py-3 flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -899,15 +897,19 @@ function ArticleEditorContent() {
               onContentChange={setContent}
               onSave={handleSaveWithContent}
               className="flex-1"
+              // FIX: Preview mode reverting - share pending revision state
+              pendingRevision={pendingRevision}
+              onPendingRevisionChange={setPendingRevision}
             />
           ) : showPreview ? (
             /* Preview Mode - Shows exactly how article will appear on GetEducated.com */
+            /* FIX: Use pendingRevision content if available to prevent reverting */
             <ScrollArea className="flex-1">
               <GetEducatedPreview
                 article={{
                   ...article,
                   title,
-                  content,
+                  content: pendingRevision?.revisedContent || content,
                   word_count: wordCount,
                   faqs,
                   article_contributors: contributors.find(c => c.id === selectedContributorId)

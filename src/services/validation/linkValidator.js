@@ -8,12 +8,15 @@
  */
 
 // Competitor domains to block
+// FIX #4: Expanded list based on Slack feedback from Kayleigh/Sara
 export const BLOCKED_COMPETITORS = [
+  // Primary competitors (mentioned in Slack)
   'onlineu.com',
   'usnews.com',
+  'bestcolleges.com',
+  // Secondary competitors
   'affordablecollegesonline.com',
   'toponlinecollegesusa.com',
-  'bestcolleges.com',
   'niche.com',
   'collegeconfidential.com',
   'cappex.com',
@@ -24,6 +27,24 @@ export const BLOCKED_COMPETITORS = [
   'petersons.com',
   'princetonreview.com',
   'collegexpress.com',
+  // Additional competitors (often missed)
+  'onlineu.org',
+  'onlineschoolscenter.com',
+  'onlinecolleges.net',
+  'thebestschools.org',
+  'collegeatlas.org',
+  'collegevaluesonline.com',
+  'guidetoonlineschools.com',
+  'accreditedschoolsonline.org',
+  'accreditedcollegesonline.com',
+  'onlinecollegecourses.com',
+  'onlinedegrees.com',
+  'elearners.com',
+  'onlineu.net',
+  'bestaccreditedcolleges.org',
+  'collegerank.net',
+  'university.com',
+  'worldwidelearn.com',
 ]
 
 // Allowed external domains (whitelist approach for external links)
@@ -310,6 +331,136 @@ export function canPublish(validationResult) {
   }
 }
 
+/**
+ * FIX #4: Check if a URL is live (not a 404)
+ * Uses HEAD request for efficiency
+ * @param {string} url - URL to check
+ * @param {number} timeout - Timeout in ms (default 5000)
+ * @returns {Promise<Object>} { isLive, statusCode, error }
+ */
+export async function checkLinkStatus(url, timeout = 5000) {
+  if (!url || url.startsWith('#') || url.startsWith('/')) {
+    return { isLive: true, statusCode: null, error: null, skipped: true }
+  }
+  
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeout)
+    
+    const response = await fetch(url, {
+      method: 'HEAD',
+      signal: controller.signal,
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; GetEducatedBot/1.0; +https://geteducated.com)',
+      },
+    })
+    
+    clearTimeout(timeoutId)
+    
+    const isLive = response.status >= 200 && response.status < 400
+    
+    return {
+      isLive,
+      statusCode: response.status,
+      finalUrl: response.url, // After redirects
+      error: null,
+    }
+    
+  } catch (error) {
+    // Handle specific errors
+    if (error.name === 'AbortError') {
+      return { isLive: false, statusCode: null, error: 'Timeout' }
+    }
+    
+    return { 
+      isLive: false, 
+      statusCode: null, 
+      error: error.message || 'Network error',
+    }
+  }
+}
+
+/**
+ * FIX #4: Validate all links in content for liveness (404 check)
+ * @param {string} content - HTML content
+ * @param {Object} options - Options
+ * @returns {Promise<Object>} Validation result with live/dead links
+ */
+export async function validateLinksAreLive(content, options = {}) {
+  const { 
+    checkExternal = true,
+    checkInternal = true,
+    maxConcurrent = 5,
+    timeout = 5000,
+  } = options
+  
+  const links = extractLinks(content)
+  const results = {
+    totalChecked: 0,
+    liveLinks: 0,
+    deadLinks: 0,
+    timeoutLinks: 0,
+    skippedLinks: 0,
+    details: [],
+  }
+  
+  // Filter links based on options
+  const linksToCheck = links.filter(link => {
+    if (link.url.startsWith('#') || link.url.startsWith('/')) {
+      results.skippedLinks++
+      return false
+    }
+    
+    const isInternal = link.url.includes('geteducated.com')
+    if (isInternal && !checkInternal) {
+      results.skippedLinks++
+      return false
+    }
+    if (!isInternal && !checkExternal) {
+      results.skippedLinks++
+      return false
+    }
+    
+    return true
+  })
+  
+  // Check links in batches
+  for (let i = 0; i < linksToCheck.length; i += maxConcurrent) {
+    const batch = linksToCheck.slice(i, i + maxConcurrent)
+    const batchResults = await Promise.all(
+      batch.map(async link => {
+        const status = await checkLinkStatus(link.url, timeout)
+        return { ...link, status }
+      })
+    )
+    
+    for (const result of batchResults) {
+      results.totalChecked++
+      
+      if (result.status.isLive) {
+        results.liveLinks++
+      } else if (result.status.error === 'Timeout') {
+        results.timeoutLinks++
+      } else {
+        results.deadLinks++
+      }
+      
+      results.details.push({
+        url: result.url,
+        anchorText: result.anchorText,
+        isLive: result.status.isLive,
+        statusCode: result.status.statusCode,
+        error: result.status.error,
+      })
+    }
+  }
+  
+  results.hasDeadLinks = results.deadLinks > 0
+  
+  return results
+}
+
 export default {
   validateLink,
   validateContent,
@@ -319,6 +470,8 @@ export default {
   isGetEducatedRankingReport,
   getSchoolPageUrl,
   canPublish,
+  checkLinkStatus,
+  validateLinksAreLive,
   BLOCKED_COMPETITORS,
   ALLOWED_EXTERNAL_DOMAINS,
 }

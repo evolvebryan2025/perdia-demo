@@ -786,6 +786,134 @@ INSTEAD OF SPECIFIC NUMBERS, USE:
 `
 
 /**
+ * FIX: Ideas → Article Mismatch
+ * Validate that generated content matches the original idea intent
+ * @param {string} content - Generated HTML content
+ * @param {Object} idea - Original content idea
+ * @returns {Object} Validation result with matches and mismatches
+ */
+export function validateIdeaAlignment(content, idea) {
+  const result = {
+    isAligned: true,
+    matches: [],
+    mismatches: [],
+    warnings: [],
+    score: 100,
+  }
+
+  if (!content || !idea) {
+    result.warnings.push('Missing content or idea for alignment check')
+    return result
+  }
+
+  const contentLower = content.toLowerCase()
+  const contentText = content.replace(/<[^>]*>/g, ' ').toLowerCase()
+
+  // Check 1: Title keywords should appear in content
+  if (idea.title) {
+    const titleWords = idea.title.toLowerCase()
+      .split(/\s+/)
+      .filter(w => w.length > 4)
+      .filter(w => !['online', 'degree', 'program', 'guide', 'best', 'programs'].includes(w))
+    
+    const missingTitleWords = titleWords.filter(word => !contentText.includes(word))
+    
+    if (missingTitleWords.length > titleWords.length / 2) {
+      result.mismatches.push({
+        type: 'title_mismatch',
+        message: `Article missing key title words: ${missingTitleWords.join(', ')}`,
+        severity: 'high',
+      })
+      result.isAligned = false
+      result.score -= 30
+    } else if (missingTitleWords.length > 0) {
+      result.warnings.push(`Some title words not found: ${missingTitleWords.join(', ')}`)
+      result.score -= 10
+    } else {
+      result.matches.push('Title keywords present in content')
+    }
+  }
+
+  // Check 2: Featured schools MUST appear if specified
+  if (idea.school_names?.length) {
+    const missingSchools = idea.school_names.filter(school => 
+      !contentLower.includes(school.toLowerCase())
+    )
+    
+    if (missingSchools.length > 0) {
+      result.mismatches.push({
+        type: 'missing_schools',
+        message: `CRITICAL: Article missing required schools: ${missingSchools.join(', ')}`,
+        severity: 'critical',
+      })
+      result.isAligned = false
+      result.score -= 50
+    } else {
+      result.matches.push(`All ${idea.school_names.length} featured schools mentioned`)
+    }
+  }
+
+  // Check 3: Degree level should match
+  if (idea.degree_level) {
+    const levelTerms = {
+      'associate': ['associate', "associate's"],
+      'bachelors': ['bachelor', "bachelor's", 'undergraduate'],
+      'masters': ['master', "master's", 'graduate'],
+      'doctorate': ['doctorate', 'doctoral', 'phd', 'doctor'],
+      'certificate': ['certificate', 'certification'],
+    }
+    
+    const terms = levelTerms[idea.degree_level.toLowerCase()] || [idea.degree_level.toLowerCase()]
+    const hasLevel = terms.some(term => contentText.includes(term))
+    
+    if (!hasLevel) {
+      result.mismatches.push({
+        type: 'degree_level_mismatch',
+        message: `Article doesn't mention the expected degree level: ${idea.degree_level}`,
+        severity: 'medium',
+      })
+      result.score -= 15
+    } else {
+      result.matches.push(`Degree level (${idea.degree_level}) referenced`)
+    }
+  }
+
+  // Check 4: Target keywords should appear
+  if (idea.target_keywords?.length) {
+    const foundKeywords = idea.target_keywords.filter(kw => 
+      contentText.includes(kw.toLowerCase())
+    )
+    
+    const missingKeywords = idea.target_keywords.filter(kw => 
+      !contentText.includes(kw.toLowerCase())
+    )
+    
+    if (missingKeywords.length > idea.target_keywords.length / 2) {
+      result.warnings.push(`Many target keywords missing: ${missingKeywords.join(', ')}`)
+      result.score -= 10
+    }
+    
+    if (foundKeywords.length > 0) {
+      result.matches.push(`${foundKeywords.length}/${idea.target_keywords.length} target keywords found`)
+    }
+  }
+
+  // Check 5: Subject area alignment
+  if (idea.monetization_category || idea.subject_area) {
+    const subject = idea.monetization_category || idea.subject_area
+    if (!contentText.includes(subject.toLowerCase())) {
+      result.warnings.push(`Subject area "${subject}" not explicitly mentioned`)
+      result.score -= 5
+    }
+  }
+
+  // Clamp score
+  result.score = Math.max(0, result.score)
+  
+  return result
+}
+
+/**
  * Quick validation for draft stage (less strict)
  */
 export async function validateDraft(content, options = {}) {
