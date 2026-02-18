@@ -260,7 +260,7 @@ function MainLayout() {
       <div className="pl-64">
         <SystemStatusBanner />
         <main className="min-h-screen">
-          <Outlet key={location.pathname} />
+          <Outlet />
         </main>
       </div>
 

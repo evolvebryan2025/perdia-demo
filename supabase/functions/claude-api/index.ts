@@ -58,7 +58,8 @@ CRITICAL HUMANIZATION TECHNIQUES:
 4. **Natural Writing Patterns**:
    - Avoid overly perfect grammar (humans make small stylistic choices)
    - Use contractions naturally (don't, won't, I've)
-   - Include em-dashes for emphasis—like this
+   - NEVER use em-dashes (—) as they are a well-known AI writing indicator
+   - Use commas, colons, or semicolons for natural pauses instead
    - Vary paragraph lengths significantly
 
 5. **BANNED AI PHRASES** (Never use these):

@@ -447,6 +447,8 @@ class GenerationService {
         const assignmentResult = await this.assignContributorWithReasoning(idea, contentType)
         contributor = assignmentResult.contributor
         contributorReasoning = assignmentResult.reasoning
+        // Store for quality score calculation (used by calculateQualityMetrics)
+        this._currentContributorId = contributor?.id || null
 
         // Log contributor selection reasoning
         this.logReasoning('contributor_selection', {
@@ -804,6 +806,9 @@ class GenerationService {
 
       this.updateProgress(onProgress, 'Running quality assurance...', 70)
 
+      // Post-processing: Strip em-dashes (AI writing tell)
+      finalContent = finalContent.replace(/\s*—\s*/g, ', ')
+
       // STAGE 5: Quality Assurance Loop (with auto-fix)
       let articleData = {
         title: draftData.title,
@@ -1056,7 +1061,8 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
     } : null
 
     // Build article object for the unified service
-    const article = { faqs: faqs || [] }
+    // Include contributor_id so author check matches the editor's live score
+    const article = { faqs: faqs || [], contributor_id: this._currentContributorId || null }
 
     // Use the unified quality score service
     // If no thresholds provided, it will use defaults (matching system_settings)

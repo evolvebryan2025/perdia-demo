@@ -57,26 +57,30 @@ export function useDeleteContentIdeaWithReason() {
       deletionReason,
       additionalNotes,
     }) => {
-      // First log the deletion
-      await logDeletion.mutateAsync({
-        entityType: 'content_idea',
-        entityId: idea.id,
-        entityTitle: idea.title,
-        deletionCategory,
-        deletionReason,
-        additionalNotes,
-        entityMetadata: {
-          description: idea.description,
-          seed_topics: idea.seed_topics,
-          status: idea.status,
-          monetization_score: idea.monetization_score,
-          monetization_confidence: idea.monetization_confidence,
-          rejection_category: idea.rejection_category,
-          rejection_reason: idea.rejection_reason,
-        },
-      })
+      // Log the deletion (non-blocking - don't let logging failures prevent deletion)
+      try {
+        await logDeletion.mutateAsync({
+          entityType: 'content_idea',
+          entityId: idea.id,
+          entityTitle: idea.title,
+          deletionCategory,
+          deletionReason,
+          additionalNotes,
+          entityMetadata: {
+            description: idea.description,
+            seed_topics: idea.seed_topics,
+            status: idea.status,
+            monetization_score: idea.monetization_score,
+            monetization_confidence: idea.monetization_confidence,
+            rejection_category: idea.rejection_category,
+            rejection_reason: idea.rejection_reason,
+          },
+        })
+      } catch (logError) {
+        console.warn('Failed to log deletion, proceeding with delete:', logError)
+      }
 
-      // Then delete the idea
+      // Always proceed with the actual deletion
       const { error } = await supabase
         .from('content_ideas')
         .delete()

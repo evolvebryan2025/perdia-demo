@@ -392,7 +392,7 @@ ${dynamicRulesSection}
 STRUCTURE:
 ${this.getStructureForContentType(contentType)}
 
-BANNED PHRASES (never use these):
+BANNED PHRASES AND PATTERNS (never use these):
 - "In today's digital age"
 - "In conclusion"
 - "It's important to note that"
@@ -402,6 +402,11 @@ BANNED PHRASES (never use these):
 - "Game changer"
 - "Revolutionary"
 - "Cutting-edge"
+- Em-dashes (—) — NEVER use these, use commas or semicolons instead
+- "Leverage"
+- "Robust"
+- "Seamless"
+- "Navigate the landscape"
 
 === CRITICAL HTML FORMATTING RULES (MANDATORY) ===
 

@@ -48,11 +48,10 @@ class StealthGptClient {
     this.maxChunkSize = 1500
 
     // Detection threshold - howLikelyToBeDetected score from API
-    // NOTE: Despite the field name, empirical testing shows HIGHER scores = BETTER
-    // (possibly StealthGPT returns an "undetectability" or "human-likeness" score)
-    // User confirmed: scores of 85+ are acceptable for passing as human
-    // We stop iterating once we hit this target to save API credits
-    this.detectionThreshold = 85
+    // LOWER scores = BETTER (less likely to be detected as AI)
+    // Per StealthGPT docs: "retry if > 25" means scores under 25 are acceptable
+    // We stop iterating once score drops BELOW this threshold
+    this.detectionThreshold = 25
 
     // Max retry attempts for iterative rephrasing
     // IMPORTANT: We exit early as soon as threshold is met to save credits
@@ -211,10 +210,10 @@ class StealthGptClient {
     let iterations = 0
 
     // Track the best result across all iterations
-    // Higher score = better (more likely to pass as human-written)
+    // LOWER score = better (less likely to be detected as AI)
     let bestResult = {
       content: content,
-      score: 0,
+      score: 100,
     }
 
     // Iterative rephrasing until score meets threshold
@@ -243,14 +242,14 @@ class StealthGptClient {
 
       console.log(`[StealthGPT] Iteration ${iterations}: Detection score = ${score}`)
 
-      // Track best result (higher score = better based on empirical testing)
-      if (score > bestResult.score) {
+      // Track best result (LOWER score = better = less likely to be detected)
+      if (score < bestResult.score) {
         bestResult = { content: currentContent, score }
       }
 
-      // EXIT EARLY: If we achieved target score, stop immediately to save credits
-      if (score >= detectionThreshold) {
-        console.log(`[StealthGPT] ✓ Target score (${detectionThreshold}) achieved after ${iterations} iteration(s) - stopping early`)
+      // EXIT EARLY: If we achieved target score (below threshold), stop to save credits
+      if (score <= detectionThreshold) {
+        console.log(`[StealthGPT] ✓ Score ${score} is below threshold (${detectionThreshold}) after ${iterations} iteration(s) - stopping early`)
         return {
           result: currentContent,
           detectionScore: score,
@@ -518,10 +517,10 @@ class StealthGptClient {
 
   /**
    * Set the detection threshold (score needed to stop iterating)
-   * Based on empirical testing, higher scores = better (more human-like)
-   * Higher values = stricter requirements but more API calls
-   * Lower values = fewer API calls but potentially more detectable content
-   * @param {number} threshold - Score threshold (0-100), default 85
+   * LOWER scores = better (less likely to be detected as AI)
+   * Lower threshold = stricter requirements but more API calls
+   * Higher threshold = fewer API calls but potentially more detectable content
+   * @param {number} threshold - Score threshold (0-100), default 25
    */
   setDetectionThreshold(threshold) {
     this.detectionThreshold = Math.max(0, Math.min(100, threshold))

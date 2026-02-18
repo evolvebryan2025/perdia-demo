@@ -58,6 +58,23 @@ export function useCreateContentIdea() {
         .select()
         .single()
 
+      // Fallback: if source constraint fails, retry with 'manual' source
+      if (error && error.message?.includes('check constraint') && ideaData.source) {
+        console.warn(`Source '${ideaData.source}' rejected by DB constraint, falling back to 'manual'`)
+        const { data: retryData, error: retryError } = await supabase
+          .from('content_ideas')
+          .insert({
+            ...ideaData,
+            source: 'manual',
+            user_id: user.id,
+          })
+          .select()
+          .single()
+
+        if (retryError) throw retryError
+        return retryData
+      }
+
       if (error) throw error
       return data
     },
