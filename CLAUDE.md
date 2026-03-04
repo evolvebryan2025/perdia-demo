@@ -127,7 +127,7 @@ The generation pipeline is the heart of the application, orchestrated by `src/se
 ### Data Layer
 
 **Supabase Integration** (`src/services/supabaseClient.js`):
-- PostgreSQL database with 14 tables (see README.md for full schema)
+- PostgreSQL database with 86 tables/views (see README.md for full schema)
 - Row-level security (RLS) policies for multi-user access
 - Real-time subscriptions for live updates
 
@@ -247,7 +247,7 @@ Beyond AI clients, the `src/services/` directory contains:
 
 ### Database Migrations
 
-Supabase migrations are in `supabase/migrations/`. Run migrations in order via Supabase SQL Editor when setting up new environments.
+Supabase migrations are in `supabase/migrations/` (72 files). Use `supabase db push` via the CLI to apply migrations. The Supabase CLI is configured and linked to project `nvffvcjtrgxnunncdafz`.
 
 **Core migrations:**
 - `20250101000000_initial_schema.sql` - Base tables (articles, content_ideas, contributors, etc.)
@@ -498,6 +498,7 @@ Minimum score is clamped to 0.
 - TipTap editor used for rich text editing (React 19 compatible, replaced ReactQuill)
 - Client-side API keys - security risk, needs Edge Functions migration
 - Desktop-first design - no mobile optimization
+- Navigation: `<Outlet>` in MainLayout MUST have `key={location.pathname.split('/')[1] || 'index'}` to prevent pages from getting stuck (especially the article editor). Do NOT remove this key.
 
 See `docs/v5-updates/07-REMAINING-IMPLEMENTATION.md` for detailed gap analysis.
 
@@ -572,6 +573,19 @@ Include reasoning/thinking output for debugging:
 - Why monetization category was chosen
 - Why internal links were selected
 - Warnings for data freshness issues
+
+## Deployment & Infrastructure
+
+| Service | Name | ID |
+|---------|------|-----|
+| GitHub | disruptorsai/perdiav5-1 | - |
+| Supabase | perdiav5 | nvffvcjtrgxnunncdafz |
+| Netlify | perdiav55 | 528fd438-9334-4787-a6c1-174d7388e9b2 |
+
+**Live URL:** https://perdiav55.netlify.app
+**Supabase MCP:** https://mcp.supabase.com/mcp?project_ref=nvffvcjtrgxnunncdafz
+
+Netlify auto-deploys from `main` branch pushes. Supabase CLI is installed and linked locally.
 
 ## Key URLs for GetEducated Integration
 

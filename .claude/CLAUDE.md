@@ -1,7 +1,6 @@
 # perdiav5 - Claude Code Context
 
-> **Initialized:** 2025-12-15 | **Updated:** 2026-01-12
-> **Path:** C:\Users\Disruptors\Documents\Tech Integration Labs BB1\Projects\Perdiav5\perdiav5
+> **Initialized:** 2025-12-15 | **Updated:** 2026-03-03
 
 ## Project Description
 
@@ -31,8 +30,8 @@ All work is automatically logged to `~/.claude/timesheet/logs/`
 ### MCP Servers
 - **Notion** - Page/database management
 - **GoHighLevel** - CRM integration
-- **Supabase** - Database (project: perdiav5)
-- **Netlify** - Deployments (site: perdiav5)
+- **Supabase** - Database (project ref: nvffvcjtrgxnunncdafz)
+- **Netlify** - Deployments (site: perdiav55)
 
 ### Subagents
 - `timesheet-reporter` - "Generate my timesheet"
@@ -44,13 +43,12 @@ All work is automatically logged to `~/.claude/timesheet/logs/`
 | Service | Project/Site | ID |
 |---------|--------------|-----|
 | Supabase | perdiav5 | nvffvcjtrgxnunncdafz |
-| Netlify | perdiav5 | e6c79ffe-d40e-4123-b404-ade94e4ec295 |
-| GitHub | disruptorsai/perdiav5 | - |
+| Netlify | perdiav55 | 528fd438-9334-4787-a6c1-174d7388e9b2 |
+| GitHub | disruptorsai/perdiav5-1 | - |
 
-**Live URL:** https://perdiav5.netlify.app
+**Live URL:** https://perdiav55.netlify.app
 **DB Host:** db.nvffvcjtrgxnunncdafz.supabase.co
-
-Configuration sourced from: `/Operations/dev-config-system/projects/_registry.json`
+**Supabase MCP:** https://mcp.supabase.com/mcp?project_ref=nvffvcjtrgxnunncdafz
 
 ## Project Notes
 
@@ -67,7 +65,25 @@ Configuration sourced from: `/Operations/dev-config-system/projects/_registry.js
 - `src/services/ai/claudeClient.js` - Claude API client (fallback/revision)
 - `src/contexts/AuthContext.jsx` - Authentication layer
 - `src/App.jsx` - Main routing
-- `supabase/migrations/` - Database migrations
+- `supabase/migrations/` - Database migrations (72 files)
+
+## Supabase CLI
+
+```bash
+# Link to project (already configured)
+supabase link --project-ref nvffvcjtrgxnunncdafz
+
+# Push new migrations
+supabase db push
+
+# Check migration status
+supabase migration list
+
+# Repair a failed migration
+supabase migration repair --status reverted <version>
+```
+
+Requires `SUPABASE_ACCESS_TOKEN` env var or `supabase login`.
 
 ---
 *Global system docs: ~/Documents/personal/claude-timesheet-system/*
