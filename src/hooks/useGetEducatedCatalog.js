@@ -12,14 +12,44 @@ import { useAuth } from '../contexts/AuthContext'
  * - Finding relevant articles for topic matching
  */
 
+// Content types to exclude from the catalog (non-article pages)
+export const EXCLUDED_CONTENT_TYPES = [
+  'contributor',
+  'school_page',
+  'degree_directory',
+  'degree_category',
+  'school_profile',
+  'category',
+  'subject',
+  'ranking',
+]
+
+// Content types that are actual articles (for filtering)
+export const ARTICLE_CONTENT_TYPES = [
+  'guide',
+  'career',
+  'blog',
+  'scholarship',
+  'how_to',
+  'listicle',
+  'explainer',
+  'accreditation',
+  'resource',
+  'financial_aid',
+  'degree_type',
+  'page',
+  'other',
+]
+
 // ========================================
 // ARTICLE HOOKS
 // ========================================
 
 /**
  * Fetch GetEducated articles with filtering
+ * Only returns article content types (excludes non-article pages)
  * @param {Object} filters - Filter options
- * @param {string} filters.contentType - Filter by content type (ranking, career, blog, guide, etc.)
+ * @param {string} filters.contentType - Filter by content type (career, blog, guide, etc.)
  * @param {string} filters.degreeLevel - Filter by degree level (doctorate, masters, bachelors, etc.)
  * @param {string} filters.subjectArea - Filter by subject area (nursing, business, education, etc.)
  * @param {string} filters.search - Search in title and content
@@ -35,6 +65,7 @@ export function useGetEducatedArticles(filters = {}) {
       let query = supabase
         .from('geteducated_articles')
         .select('*')
+        .in('content_type', ARTICLE_CONTENT_TYPES)
         .order('updated_at', { ascending: false })
 
       // Apply filters
@@ -138,11 +169,13 @@ export function useFindRelevantArticles(params = {}) {
 
 /**
  * Fallback search when RPC is not available
+ * Only searches article content types (excludes non-article pages)
  */
 async function fallbackRelevantSearch(topics, subjectArea, degreeLevel, excludeUrls, limit) {
   let query = supabase
     .from('geteducated_articles')
     .select('id, url, title, excerpt, content_type, degree_level, subject_area, topics, times_linked_to')
+    .in('content_type', ARTICLE_CONTENT_TYPES)
     .not('content_text', 'is', null)
     .order('times_linked_to', { ascending: true })
     .limit(limit * 3) // Get more for client-side filtering
@@ -191,6 +224,7 @@ async function fallbackRelevantSearch(topics, subjectArea, degreeLevel, excludeU
 
 /**
  * Get catalog enrichment statistics
+ * Only counts article content types (excludes non-article pages)
  */
 export function useGetEducatedCatalogStats() {
   const { user } = useAuth()
@@ -198,27 +232,31 @@ export function useGetEducatedCatalogStats() {
   return useQuery({
     queryKey: ['geteducated-catalog-stats'],
     queryFn: async () => {
-      // Get total count
+      // Get total count (only article types)
       const { count: totalCount } = await supabase
         .from('geteducated_articles')
         .select('*', { count: 'exact', head: true })
+        .in('content_type', ARTICLE_CONTENT_TYPES)
 
-      // Get enriched count (has content)
+      // Get enriched count (has content, only article types)
       const { count: enrichedCount } = await supabase
         .from('geteducated_articles')
         .select('*', { count: 'exact', head: true })
+        .in('content_type', ARTICLE_CONTENT_TYPES)
         .not('content_text', 'is', null)
 
-      // Get revised count (version_count > 1)
+      // Get revised count (version_count > 1, only article types)
       const { count: revisedCount } = await supabase
         .from('geteducated_articles')
         .select('*', { count: 'exact', head: true })
+        .in('content_type', ARTICLE_CONTENT_TYPES)
         .gt('version_count', 1)
 
-      // Get content type breakdown
+      // Get content type breakdown (only article types)
       const { data: contentTypes } = await supabase
         .from('geteducated_articles')
         .select('content_type')
+        .in('content_type', ARTICLE_CONTENT_TYPES)
 
       const contentTypeBreakdown = {}
       ;(contentTypes || []).forEach(a => {
@@ -226,10 +264,11 @@ export function useGetEducatedCatalogStats() {
         contentTypeBreakdown[type] = (contentTypeBreakdown[type] || 0) + 1
       })
 
-      // Get degree level breakdown
+      // Get degree level breakdown (only article types)
       const { data: degreeLevels } = await supabase
         .from('geteducated_articles')
         .select('degree_level')
+        .in('content_type', ARTICLE_CONTENT_TYPES)
         .not('degree_level', 'is', null)
 
       const degreeLevelBreakdown = {}
@@ -239,10 +278,11 @@ export function useGetEducatedCatalogStats() {
         }
       })
 
-      // Get subject area breakdown
+      // Get subject area breakdown (only article types)
       const { data: subjectAreas } = await supabase
         .from('geteducated_articles')
         .select('subject_area')
+        .in('content_type', ARTICLE_CONTENT_TYPES)
         .not('subject_area', 'is', null)
 
       const subjectAreaBreakdown = {}
@@ -549,6 +589,9 @@ export function useGetEducatedArticlesPaginated(options = {}) {
       let query = supabase
         .from('geteducated_articles')
         .select('*', { count: 'exact' })
+
+      // Exclude non-article content types
+      query = query.in('content_type', ARTICLE_CONTENT_TYPES)
 
       // Sort revised articles first when not filtering to revised-only
       // version_count DESC puts revised articles (version_count > 1) at top
