@@ -354,6 +354,16 @@ REQUIREMENTS:
    - Include BOTH in-state and out-of-state costs when available
    - NEVER invent or estimate costs - only use data from ranking reports
 
+=== COST DATA RULES (CRITICAL) ===
+1. When citing costs from ranking reports, use TOTAL PROGRAM COST, not per-credit cost
+2. If the data source shows per-credit cost, you MUST say "starting at $X per credit hour" — NEVER present per-credit costs as total program costs
+3. AVOID degree-completion rankings — use standard degree program rankings instead
+4. Always specify what the cost number represents: "total program cost" or "per credit hour"
+5. When listing affordable programs, cite the CHEAPEST client school options first
+6. If no client schools are available for a topic, use the cheapest non-client options
+7. NEVER present per-credit costs as if they are total program costs
+=== END COST DATA RULES ===
+
 2. SCHOOL/DEGREE REFERENCES:
    - NEVER invent or fabricate school names (e.g., "University A", "College B", "[School Name]")
    - Only mention specific schools if they appear in the cost data provided above
@@ -366,6 +376,22 @@ REQUIREMENTS:
    - For education statistics, reference NCES, Department of Education
    - Accreditation info should reference official accreditation bodies (AACSB, ABET, etc.)
    - NEVER reference competitor sites (onlineu.com, usnews.com, affordablecollegesonline.com)
+
+=== EXTERNAL LINKS (MANDATORY) ===
+You MUST embed at least 2 external hyperlinks in the article as HTML <a> tags.
+
+Approved external sources ONLY:
+- Bureau of Labor Statistics: Use actual BLS Occupational Outlook pages, e.g., <a href="https://www.bls.gov/ooh/healthcare/registered-nurses.htm">Bureau of Labor Statistics</a>
+- NCES: <a href="https://nces.ed.gov/">National Center for Education Statistics</a>
+- Department of Education (.gov sites)
+- Official accreditation bodies
+
+When citing salary data, job outlook, or career statistics, you MUST embed the source as a clickable link:
+CORRECT: <p>According to the <a href="https://www.bls.gov/ooh/healthcare/registered-nurses.htm">Bureau of Labor Statistics</a>, registered nurses earn a median salary of $81,220.</p>
+WRONG: <p>According to the Bureau of Labor Statistics, registered nurses earn a median salary of $81,220.</p>
+
+NEVER mention BLS, NCES, or any external source without embedding a hyperlink to it.
+=== END EXTERNAL LINKS ===
 
 4. CONTENT FOCUS:
    - All content must be relevant to ONLINE students
@@ -407,6 +433,7 @@ BANNED PHRASES AND PATTERNS (never use these):
 - "Robust"
 - "Seamless"
 - "Navigate the landscape"
+- VARY LIST LENGTH: Do NOT always list exactly 3 items ("X, Y, and Z"). This is a known AI writing pattern. Mix it up — sometimes list 2 items, sometimes 4 or 5. Avoid the "rule of three" pattern.
 
 === CRITICAL HTML FORMATTING RULES (MANDATORY) ===
 

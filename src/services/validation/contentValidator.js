@@ -936,4 +936,40 @@ export async function validateForPublish(content, options = {}) {
 // Export singleton instance
 export const contentValidator = new ContentValidator()
 
+/**
+ * Detect triplicate patterns (AI "rule of three") in content
+ * Counts phrases that list exactly 3 items joined by commas and "and"
+ * Pattern: "X, Y, and Z" or "X, Y and Z"
+ *
+ * @param {string} content - HTML content
+ * @returns {{ count: number, examples: string[], severity: string }}
+ */
+export function detectTriplicates(content) {
+  if (!content) return { count: 0, examples: [], severity: 'none' }
+
+  const plainText = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+
+  // Pattern: "word/phrase, word/phrase, and word/phrase"
+  const triplicatePattern = /\b([A-Za-z][A-Za-z\s]{1,30}),\s+([A-Za-z][A-Za-z\s]{1,30}),?\s+and\s+([A-Za-z][A-Za-z\s]{1,30})\b/gi
+
+  const matches = []
+  let match
+  while ((match = triplicatePattern.exec(plainText)) !== null) {
+    matches.push(match[0].trim())
+  }
+
+  const unique = [...new Set(matches)]
+
+  let severity = 'none'
+  if (unique.length >= 10) severity = 'major'
+  else if (unique.length >= 6) severity = 'minor'
+  else if (unique.length >= 3) severity = 'info'
+
+  return {
+    count: unique.length,
+    examples: unique.slice(0, 5),
+    severity,
+  }
+}
+
 export default ContentValidator

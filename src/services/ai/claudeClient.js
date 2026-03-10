@@ -231,6 +231,7 @@ CRITICAL HUMANIZATION TECHNIQUES:
    - "Seamless"
    - "Navigate the landscape"
    - "Embark on a journey"
+   - Avoid the "rule of three" pattern — do NOT always list exactly 3 items in sentences. Humans vary between 2, 4, and 5 items naturally. If you find yourself writing "X, Y, and Z" more than 3 times in an article, rewrite some as pairs or longer lists.
 
 6. **Content Quality**:
    - Keep all factual information accurate (especially costs and accreditation)
@@ -347,7 +348,8 @@ OUTPUT ONLY THE CORRECTED HTML CONTENT. DO NOT include explanations or notes.`
    * Revise content based on editorial feedback
    * CRITICAL: This method MUST preserve the original article and only make targeted edits
    */
-  async reviseWithFeedback(content, feedbackItems) {
+  async reviseWithFeedback(content, feedbackItems, options = {}) {
+    const { siteArticles = [] } = options
     // Calculate original word count to validate later
     const originalWordCount = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(w => w.length > 0).length
 
@@ -356,6 +358,25 @@ OUTPUT ONLY THE CORRECTED HTML CONTENT. DO NOT include explanations or notes.`
    Selected text: "${item.selected_text}"
    Requested change: ${item.comment}`
     }).join('\n\n')
+
+    let catalogContext = ''
+    if (siteArticles.length > 0) {
+      catalogContext = `
+=== AVAILABLE GETEDUCATED PAGES (use these for any link requests) ===
+
+${siteArticles.map(a => {
+  const typeLabel = a.content_type === 'degree_category' ? '[BERP]' :
+                    a.content_type === 'ranking' ? '[RANKING]' :
+                    '[ARTICLE]'
+  return `- ${typeLabel} ${a.title}: ${a.url}`
+}).join('\n')}
+
+IMPORTANT: When feedback asks to "link to GetEducated's X page" or "add a link to Y", search this list for the best match. NEVER invent URLs — only use URLs from this list or from approved external domains (bls.gov, nces.ed.gov, .gov sites).
+
+If no matching page exists in this list, leave a comment like <!-- NO MATCHING PAGE FOUND FOR: [requested topic] --> rather than inventing a URL.
+=== END AVAILABLE PAGES ===
+`
+    }
 
     const prompt = `You are a SURGICAL content editor. Your task is to make ONLY the specific changes requested in the editorial feedback below.
 
@@ -397,7 +418,7 @@ ${content}
 ${feedbackText}
 
 === END FEEDBACK ===
-
+${catalogContext}
 === OUTPUT REQUIREMENTS ===
 
 1. Return the COMPLETE article HTML with ONLY the targeted edits made

@@ -20,6 +20,7 @@
 
 import { supabase } from './supabaseClient'
 import { validateContent, BLOCKED_COMPETITORS } from './validation/linkValidator'
+import { detectTriplicates } from './validation/contentValidator'
 
 // Default thresholds (used when system_settings unavailable)
 const DEFAULT_THRESHOLDS = {
@@ -135,6 +136,9 @@ export function calculateQualityScore(content, article = {}, thresholds = DEFAUL
   const h3Count = (content.match(/<h3/gi) || []).length
   const totalHeadings = h2Count + h3Count
 
+  // Triplicate detection
+  const triplicateResult = detectTriplicates(content)
+
   // Author assignment check
   const hasAuthor = !!(article?.contributor_id || article?.article_contributors)
 
@@ -199,6 +203,16 @@ export function calculateQualityScore(content, article = {}, thresholds = DEFAUL
       label: 'Author assigned',
       value: hasAuthor ? 'Assigned' : 'Missing',
       issue: !hasAuthor ? 'Assign an author/contributor' : null
+    },
+    triplicates: {
+      passed: triplicateResult.count < 10,
+      critical: false,
+      enabled: true,
+      label: 'Fewer than 10 triplicate patterns',
+      value: `${triplicateResult.count} found`,
+      issue: triplicateResult.count >= 10
+        ? `Reduce triplicate patterns (${triplicateResult.count} found). Vary sentence structure instead of always listing 3 items.`
+        : null
     },
   }
 

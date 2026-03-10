@@ -919,10 +919,25 @@ class GenerationService {
       console.log(`Fixing issues: ${issues.map(i => i.type).join(', ')}`)
 
       try {
+        // Fetch site articles for link-related fixes during generation pipeline
+        let siteArticlesForFix = []
+        const hasLinkIssues = issues.some(i =>
+          i.type === 'missing_internal_links' || i.type === 'missing_external_links'
+        )
+        if (hasLinkIssues && currentArticle.title) {
+          try {
+            siteArticlesForFix = await this.getRelevantSiteArticles(
+              currentArticle.title, 10, { topics: currentArticle.topics || [] }
+            )
+          } catch (e) {
+            console.warn('[QA Loop] Could not fetch site articles for auto-fix:', e)
+          }
+        }
+
         const fixedContent = await this.autoFixQualityIssues(
           currentArticle.content,
           issues,
-          currentArticle.faqs
+          siteArticlesForFix
         )
 
         currentArticle.content = fixedContent
@@ -956,7 +971,7 @@ class GenerationService {
   /**
    * Auto-fix quality issues using Claude
    */
-  async autoFixQualityIssues(content, issues, currentFaqs = []) {
+  async autoFixQualityIssues(content, issues, siteArticles = []) {
     const issueDescriptions = issues.map(issue => {
       switch (issue.type) {
         case 'word_count_low':
@@ -964,24 +979,33 @@ class GenerationService {
         case 'word_count_high':
           return '- Article is too long. Condense and remove unnecessary repetition.'
         case 'missing_internal_links':
-          return '- Missing internal links. Add 2-3 more relevant internal links if possible.'
+          return '- Missing internal links to GetEducated. You MUST add internal links using the AVAILABLE ARTICLES listed below.'
         case 'missing_external_links':
-          return '- Missing external citations. Add 1-2 authoritative external sources with links.'
+          return '- Missing external citations. You MUST embed 1-2 hyperlinks to authoritative sources like Bureau of Labor Statistics (https://www.bls.gov/ooh/) or NCES (https://nces.ed.gov/). Use REAL URLs from these domains and embed them as <a> tags in the text.'
         case 'missing_faqs':
-          return `- Missing FAQ section. Add ${3 - currentFaqs.length} more relevant questions and answers.`
+          return '- Missing FAQ section. Add 3 relevant questions and answers using <h2>Frequently Asked Questions</h2> followed by <h3> for questions and <p> for answers.'
         case 'weak_headings':
           return '- Weak heading structure. Add 2-3 more H2 subheadings to break up content.'
         case 'poor_readability':
           return '- Poor readability. Shorten some long sentences and use simpler language.'
+        case 'triplicates':
+          return '- Too many triplicate patterns (listing exactly 3 items). Rewrite some "X, Y, and Z" patterns to use 2 items or 4+ items instead. Vary the sentence structure.'
         default:
           return `- ${issue.type}: ${issue.severity} issue`
       }
     }).join('\n')
 
+    // Build site articles context for internal linking
+    let internalLinksContext = ''
+    if (siteArticles.length > 0) {
+      internalLinksContext = `\n\nAVAILABLE ARTICLES FOR INTERNAL LINKING (you MUST use 3-5 of these):\n${siteArticles.map(a => `- [${a.title}](${a.url})`).join('\n')}\n\nWhen adding internal links, use HTML: <a href="URL">natural anchor text</a>\nDistribute links throughout the article, not clustered together.`
+    }
+
     const prompt = `You are reviewing an article and need to fix the following quality issues:
 
 QUALITY ISSUES TO FIX:
 ${issueDescriptions}
+${internalLinksContext}
 
 CURRENT ARTICLE CONTENT:
 ${content}
@@ -1002,12 +1026,26 @@ NEVER output plain text without HTML tags. Every paragraph MUST be wrapped in <p
 
 === END HTML FORMATTING RULES ===
 
+=== EXTERNAL LINK GUIDELINES ===
+For external citations, use ONLY these approved source domains:
+- Bureau of Labor Statistics: https://www.bls.gov/ooh/ (for career outlook, salaries)
+- NCES: https://nces.ed.gov/ (for education statistics)
+- Department of Education: https://www.ed.gov/
+- Official accreditation bodies
+
+NEVER link to: .edu domains, onlineu.com, usnews.com, bestcolleges.com, niche.com, or any competitor sites.
+
+When adding external links, embed them naturally in the text:
+Example: <p>According to the <a href="https://www.bls.gov/ooh/healthcare/registered-nurses.htm">Bureau of Labor Statistics</a>, registered nurses earn a median annual salary of $81,220.</p>
+
+=== END EXTERNAL LINK GUIDELINES ===
+
 INSTRUCTIONS:
 1. Fix ALL the issues listed above
-2. Maintain the article's overall tone and message
-3. Keep the existing heading structure unless adding new headings
-4. For external citations, use real, authoritative sources when possible
-5. For FAQs, make them relevant and helpful to readers using proper HTML (<h2>Frequently Asked Questions</h2> followed by <h3> for questions and <p> for answers)
+2. For internal links: Use the AVAILABLE ARTICLES listed above - pick the most relevant ones
+3. For external links: Use REAL URLs from BLS, NCES, or .gov sites embedded as hyperlinks in the text
+4. Maintain the article's overall tone and message
+5. Keep the existing heading structure unless adding new headings
 6. Do NOT remove existing content unless consolidating
 7. Ensure all HTML tags are properly closed and all new content is properly HTML formatted
 
@@ -1021,7 +1059,7 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
         }
       ], {
         temperature: 0.7,
-        max_tokens: 4500,
+        max_tokens: 8000,
       })
 
       return fixedContent
@@ -1424,6 +1462,34 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
       // This HEAVILY penalizes unrelated subjects (e.g., Religion vs Business = -200)
       const scoredArticles = scoreArticlesForLinking(candidates, articleTitle, topics)
 
+      // Step 4.5: Boost scores based on content type priority
+      // Priority: BERPs (degree_category) > Rankings > Articles > Schools
+      const CONTENT_TYPE_BOOST = {
+        'degree_category': 100,  // BERPs pages - highest priority
+        'ranking': 80,           // Ranking/comparison pages
+        'career': 40,            // Career guides
+        'guide': 30,             // General guides
+        'how_to': 30,            // How-to articles
+        'listicle': 20,          // List articles
+        'explainer': 20,         // Explainers
+        'blog': 10,              // Blog posts
+        'school_profile': 5,     // School pages - lowest
+        'scholarship': 5,        // Scholarship pages
+        'other': 0,
+      }
+
+      scoredArticles.forEach(article => {
+        const boost = CONTENT_TYPE_BOOST[article.content_type] || 0
+        article.relevanceScore = (article.relevanceScore || 0) + boost
+        if (boost > 0) {
+          article.scoringReasons = article.scoringReasons || []
+          article.scoringReasons.push(`+${boost} content type boost (${article.content_type})`)
+        }
+      })
+
+      // Re-sort after boosting
+      scoredArticles.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
+
       // Step 5: Take top results (already filtered to remove negative scores)
       const results = scoredArticles.slice(0, 5)
 
@@ -1459,6 +1525,7 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
           title: a.title,
           excerpt: a.excerpt,
           topics: a.topics,
+          content_type: a.content_type,
           subject_area: a.subject_area,
           relevanceScore: a.relevanceScore,
         }))
@@ -1545,8 +1612,20 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
 ARTICLE CONTENT:
 ${content}
 
-AVAILABLE ARTICLES TO LINK TO:
-${siteArticles.map(a => `- [${a.title}](${a.url})`).join('\n')}
+AVAILABLE ARTICLES TO LINK TO (listed in priority order - prefer items near the top):
+${siteArticles.map(a => {
+  const typeLabel = a.content_type === 'degree_category' ? '[BERP PAGE]' :
+                    a.content_type === 'ranking' ? '[RANKING]' :
+                    a.content_type === 'school_profile' ? '[SCHOOL]' :
+                    '[ARTICLE]'
+  return `- ${typeLabel} [${a.title}](${a.url})`
+}).join('\n')}
+
+=== LINKING PRIORITY RULES ===
+1. PREFER linking to [BERP PAGE] (Browse Education Results Pages) - these are degree directory pages like /online-degrees/subject/level/
+2. SECOND PRIORITY: [RANKING] pages - these are ranking/comparison pages
+3. THIRD PRIORITY: [ARTICLE] pages - general content articles
+4. LOWEST PRIORITY: [SCHOOL] pages - individual school profiles
 
 === CRITICAL HTML FORMATTING RULES ===
 
@@ -1564,12 +1643,12 @@ NEVER output plain text without HTML tags. Every paragraph MUST be wrapped in <p
 === END HTML FORMATTING RULES ===
 
 INSTRUCTIONS:
-1. Add links where genuinely relevant
-2. Use natural anchor text
-3. Distribute throughout article
+1. Add links where genuinely relevant to the content
+2. Use natural anchor text (not "click here")
+3. Distribute throughout article - not all in one section
 4. Use HTML format: <a href="URL">anchor text</a>
 5. Aim for 3-5 links total
-6. Preserve all existing HTML formatting
+6. Preserve all existing HTML formatting and existing links
 
 OUTPUT ONLY THE UPDATED HTML CONTENT with links added.`
 
@@ -1581,7 +1660,7 @@ OUTPUT ONLY THE UPDATED HTML CONTENT with links added.`
         }
       ], {
         temperature: 0.7,
-        max_tokens: 4500,
+        max_tokens: 8000,
       })
 
       return linkedContent

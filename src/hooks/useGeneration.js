@@ -105,11 +105,37 @@ export function useAutoFixQuality() {
 
   return useMutation({
     mutationFn: async ({ articleId, content, issues }) => {
-      // Use generationService to fix issues
+      // Check if any link-related issues need fixing
+      const hasLinkIssues = issues.some(i =>
+        i.type === 'missing_internal_links' || i.type === 'missing_external_links' ||
+        (i.description && i.description.toLowerCase().includes('link'))
+      )
+
+      // Fetch site articles for context if link issues exist
+      let siteArticles = []
+      if (hasLinkIssues) {
+        try {
+          const { data: article } = await supabase
+            .from('articles')
+            .select('title, topics, content_type')
+            .eq('id', articleId)
+            .single()
+
+          if (article) {
+            siteArticles = await generationService.getRelevantSiteArticles(
+              article.title, 10, { topics: article.topics || [] }
+            )
+          }
+        } catch (e) {
+          console.warn('[AutoFix] Could not fetch site articles:', e)
+        }
+      }
+
+      // Use generationService to fix issues WITH site article context
       const fixedContent = await generationService.autoFixQualityIssues(
         content,
         issues,
-        []
+        siteArticles
       )
 
       // Recalculate quality metrics
@@ -152,10 +178,41 @@ export function useReviseArticle() {
       // Per Bug #3: Prevents logos/images from appearing in AI-revised content
       const contentWithoutImages = stripImagesFromHtml(content)
 
+      // Check if any feedback is link-related to provide catalog context
+      const feedbackText = feedbackItems.map(f => f.comment || '').join(' ').toLowerCase()
+      const isLinkRelated = feedbackText.includes('link') ||
+                            feedbackText.includes('url') ||
+                            feedbackText.includes('source') ||
+                            feedbackText.includes('cite') ||
+                            feedbackText.includes('client') ||
+                            feedbackText.includes('degree') ||
+                            feedbackText.includes('school') ||
+                            feedbackText.includes('replace')
+
+      let siteArticles = []
+      if (isLinkRelated) {
+        try {
+          const { data: article } = await supabase
+            .from('articles')
+            .select('title, topics')
+            .eq('id', articleId)
+            .single()
+
+          if (article) {
+            siteArticles = await generationService.getRelevantSiteArticles(
+              article.title, 15, { topics: article.topics || [] }
+            )
+          }
+        } catch (e) {
+          console.warn('[useReviseArticle] Could not fetch site articles:', e)
+        }
+      }
+
       // Use Claude to revise based on feedback
       const revisedContent = await generationService.claude.reviseWithFeedback(
         contentWithoutImages,
-        feedbackItems
+        feedbackItems,
+        { siteArticles }
       )
 
       // Import validation dynamically to avoid circular dependencies
@@ -265,18 +322,28 @@ export function useReviseWithFeedback() {
 
       // FIX #2: Check if any feedback is about links
       const feedbackLower = feedbackText.toLowerCase()
-      const isLinkRelated = feedbackLower.includes('link') || 
-                           feedbackLower.includes('source') || 
+      const isLinkRelated = feedbackLower.includes('link') ||
+                           feedbackLower.includes('source') ||
                            feedbackLower.includes('cite') ||
-                           feedbackLower.includes('reference')
+                           feedbackLower.includes('reference') ||
+                           feedbackLower.includes('client') ||
+                           feedbackLower.includes('degree') ||
+                           feedbackLower.includes('school') ||
+                           feedbackLower.includes('replace')
 
-      // If link-related, fetch relevant internal links
+      // If link-related, fetch relevant internal links with type labels
       let internalLinkContext = ''
       if (isLinkRelated) {
         try {
-          const relevantArticles = await generationService.getRelevantSiteArticles(title, 10, { topics })
+          const relevantArticles = await generationService.getRelevantSiteArticles(title, 15, { topics })
           if (relevantArticles.length > 0) {
-            internalLinkContext = `\nAVAILABLE INTERNAL LINKS (use these for internal linking):\n${relevantArticles.map(a => `- [${a.title}](${a.url})`).join('\n')}\n`
+            internalLinkContext = `\nAVAILABLE GETEDUCATED PAGES (use these for any link requests):\n${relevantArticles.map(a => {
+              const typeLabel = a.content_type === 'degree_category' ? '[BERP]' :
+                                a.content_type === 'ranking' ? '[RANKING]' :
+                                a.content_type === 'school_profile' ? '[SCHOOL]' :
+                                '[ARTICLE]'
+              return `- ${typeLabel} ${a.title}: ${a.url}`
+            }).join('\n')}\n\nIMPORTANT: When feedback asks to "link to GetEducated's X page", search this list for the best match. NEVER invent URLs. If no matching page exists, leave a comment like <!-- NO MATCHING PAGE FOUND FOR: [topic] --> rather than inventing a URL.\n`
           }
         } catch (e) {
           console.warn('[useReviseWithFeedback] Could not fetch internal links:', e)

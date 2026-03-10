@@ -2,6 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useArticle, useUpdateArticle, useUpdateArticleStatus } from '../hooks/useArticles'
 import { useAutoFixQuality, useHumanizeContent, useReviseWithFeedback, useComplianceUpdate } from '../hooks/useGeneration'
+import { calculateQualityScore, getQualityThresholds } from '../services/qualityScoreService'
 import { useSubmitArticleFeedback, useUserArticleFeedback, useArticleFeedbackSummary } from '../hooks/useArticleFeedback'
 import { useActiveContributors } from '../hooks/useContributors'
 import { useCreateAIRevision } from '../hooks/useAIRevisions'
@@ -161,6 +162,13 @@ function ArticleEditorContent() {
   const handleSave = async () => {
     setSaving(true)
     try {
+      // Always recalculate quality score from current content before saving
+      const thresholds = await getQualityThresholds()
+      const freshQuality = calculateQualityScore(content, {
+        contributor_id: selectedContributorId,
+        faqs,
+      }, thresholds)
+
       await updateArticle.mutateAsync({
         articleId,
         updates: {
@@ -171,8 +179,8 @@ function ArticleEditorContent() {
           content_type: contentType,
           contributor_id: selectedContributorId,
           faqs,
-          word_count: wordCount,
-          quality_score: qualityData?.score || article?.quality_score
+          word_count: freshQuality.word_count,
+          quality_score: freshQuality.score
         }
       })
       toast.success('Article saved successfully')
@@ -187,6 +195,12 @@ function ArticleEditorContent() {
   // This is called when user approves an AI revision in comment mode
   const handleSaveWithContent = useCallback(async (newContent) => {
     try {
+      const thresholds = await getQualityThresholds()
+      const freshQuality = calculateQualityScore(newContent, {
+        contributor_id: selectedContributorId,
+        faqs,
+      }, thresholds)
+
       await updateArticle.mutateAsync({
         articleId,
         updates: {
@@ -197,15 +211,15 @@ function ArticleEditorContent() {
           content_type: contentType,
           contributor_id: selectedContributorId,
           faqs,
-          word_count: getWordCount(newContent),
-          quality_score: qualityData?.score || article?.quality_score
+          word_count: freshQuality.word_count,
+          quality_score: freshQuality.score
         }
       })
       // Don't show toast here - CommentableArticle handles the success message
     } catch (error) {
       throw error // Re-throw so CommentableArticle can handle it
     }
-  }, [articleId, title, metaDescription, focusKeyword, contentType, selectedContributorId, faqs, qualityData, article, updateArticle])
+  }, [articleId, title, metaDescription, focusKeyword, contentType, selectedContributorId, faqs, updateArticle])
 
   // Status change handler
   const handleStatusChange = async (newStatus) => {
@@ -225,6 +239,13 @@ function ArticleEditorContent() {
   const handlePublish = async (publishStatus = 'draft') => {
     setIsPublishing(true)
     try {
+      // Recalculate quality score from current content before publishing
+      const thresholds = await getQualityThresholds()
+      const freshQuality = calculateQualityScore(content, {
+        contributor_id: selectedContributorId,
+        faqs,
+      }, thresholds)
+
       // Build full article object with current editor state
       const articleToPublish = {
         ...article,
@@ -236,8 +257,8 @@ function ArticleEditorContent() {
         contributor_id: selectedContributorId,
         contributor_name: contributors.find(c => c.id === selectedContributorId)?.name,
         faqs,
-        word_count: wordCount,
-        quality_score: qualityData?.score || article?.quality_score
+        word_count: freshQuality.word_count,
+        quality_score: freshQuality.score
       }
 
       const result = await publishArticle.mutateAsync({
@@ -359,6 +380,13 @@ function ArticleEditorContent() {
     const contributor = contributors.find(c => c.id === selectedContributorId)
 
     try {
+      // Recalculate quality score from revised content before saving
+      const thresholds = await getQualityThresholds()
+      const freshQuality = calculateQualityScore(pendingRevision.revisedContent, {
+        contributor_id: selectedContributorId,
+        faqs,
+      }, thresholds)
+
       // First, save the revised content to the database
       await updateArticle.mutateAsync({
         articleId,
@@ -370,8 +398,8 @@ function ArticleEditorContent() {
           content_type: contentType,
           contributor_id: selectedContributorId,
           faqs,
-          word_count: getWordCount(pendingRevision.revisedContent),
-          quality_score: qualityData?.score || article?.quality_score
+          word_count: freshQuality.word_count,
+          quality_score: freshQuality.score
         }
       })
 
