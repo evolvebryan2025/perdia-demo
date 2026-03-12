@@ -293,9 +293,30 @@ OUTPUT ONLY THE CORRECTED HTML CONTENT. DO NOT include explanations or notes.`
           ? `\nAVAILABLE INTERNAL LINKS (use these for internal linking requests):\n${availableInternalLinks.map((a: any) => `- [${a.title}](${a.url})`).join('\n')}\n`
           : ''
 
-        const prompt = `You are a content editor revising this article based on editorial feedback.
+        // Calculate original word count for validation
+        const originalWordCount = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter((w: string) => w.length > 0).length
 
-CURRENT CONTENT:
+        const prompt = `You are a SURGICAL content editor. Your task is to make ONLY the specific changes requested in the editorial feedback below. Do NOT rewrite, rephrase, or modify anything not explicitly mentioned.
+
+=== CRITICAL RULES ===
+
+1. **SURGICAL EDITS ONLY**: Make ONLY the exact changes described in each feedback item. Do NOT rewrite surrounding sentences or paragraphs.
+2. **PRESERVE EVERYTHING ELSE**: Return the COMPLETE article (~${originalWordCount} words) with ONLY the targeted changes. If your output is significantly shorter, you have made a critical error.
+3. **WORD COUNT GUARD**: Original is ~${originalWordCount} words. Your output MUST also be ~${originalWordCount} words.
+4. Preserve ALL existing HTML structure, links, and shortcodes.
+5. NEVER remove an existing <a> tag unless explicitly asked.
+
+=== ANTI-FABRICATION RULES (CRITICAL) ===
+
+- NEVER invent or fabricate school names, degree program names, tuition costs, salary/wage figures, enrollment numbers, or any statistics
+- If you cannot find the specific data needed to fulfill a comment, insert: <!-- NEEDS MANUAL DATA: [describe what data is needed] -->
+- It is ALWAYS better to flag missing data with a marker than to fabricate data
+- When asked to use "client" schools or degrees without a provided list, insert: <!-- CLIENT SCHOOL DATA NEEDED -->
+- NEVER make up school names, even plausible-sounding ones
+
+=== END ANTI-FABRICATION RULES ===
+
+CURRENT CONTENT (${originalWordCount} words):
 ${content}
 
 EDITORIAL FEEDBACK:
@@ -318,19 +339,19 @@ NEVER output plain text without HTML tags. Every paragraph MUST be wrapped in <p
 === END HTML FORMATTING RULES ===
 
 INSTRUCTIONS:
-1. Address each piece of feedback carefully
-2. Make necessary revisions to the content
+1. Address each piece of feedback with ONLY the specific change requested
+2. Keep ALL other content EXACTLY unchanged
 3. Maintain the overall structure and tone
-4. Keep all other content unchanged
-5. Preserve HTML formatting and ensure ALL new content is properly HTML formatted
-6. STRICTLY follow the linking rules above - never link to competitors or .edu sites
+4. Preserve HTML formatting and ensure ALL new content is properly HTML formatted
+5. STRICTLY follow the linking rules above - never link to competitors or .edu sites
+6. If you cannot fulfill a request because data is missing, use the <!-- NEEDS MANUAL DATA --> marker
 
 OUTPUT ONLY THE REVISED HTML CONTENT.`
 
         const response = await client.messages.create({
           model: CLAUDE_MODEL,
-          max_tokens: 4500,
-          temperature: 0.7,
+          max_tokens: 8000,  // Increased to ensure full article can be returned
+          temperature: 0.3,  // Lower temperature for precise, deterministic edits
           messages: [
             {
               role: 'user',

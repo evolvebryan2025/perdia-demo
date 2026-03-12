@@ -12,6 +12,7 @@ import StealthGptClient from './ai/stealthGptClient'
 import { supabase } from './supabaseClient'
 import IdeaDiscoveryService from './ideaDiscoveryService'
 import { getCostDataContext } from './costDataService'
+import { findCheapestClientSchools, formatCheapestSchoolsForPrompt, CLIENT_SCHOOLS } from '../config/clientSchools'
 import { insertShortcodeInContent } from './shortcodeService'
 import { MonetizationEngine, monetizationValidator } from './monetizationEngine'
 import {
@@ -23,7 +24,8 @@ import {
 } from '../hooks/useContributors'
 import { contentValidator, validateDraft, validateForPublish, validateIdeaAlignment } from './validation/contentValidator'
 import { calculateQualityScore, getQualityThresholds, calculateQualityScoreAsync } from './qualityScoreService'
-import { detectSubjectArea, scoreArticlesForLinking } from './subjectMatcher'
+import { detectSubjectArea, scoreArticlesForLinking, selectDiverseLinks, normalizeUrl } from './subjectMatcher'
+import { extractLinks as extractLinksFromContent } from './validation/linkValidator'
 
 class GenerationService {
   constructor() {
@@ -301,6 +303,44 @@ class GenerationService {
       section += '- Do NOT invent or estimate data points\n'
     }
 
+    // === SALARY & COST DATA ACCURACY RULES ===
+    // Item 7 fix: Prevent AI from fabricating salary/cost figures
+    section += `
+
+=== SALARY & COST DATA ACCURACY (MANDATORY) ===
+
+NEVER fabricate or estimate salary figures. Only use data from the Bureau of Labor Statistics Occupational Outlook Handbook.
+
+When citing salary data, ALWAYS include the BLS source URL as a hyperlink:
+<a href="https://www.bls.gov/ooh/[specific-occupation-page]">Bureau of Labor Statistics</a>
+Use the specific OOH occupation page URL, not the generic BLS homepage.
+
+For program costs and tuition, use ranges with caveats like "according to NCES data" and link to <a href="https://nces.ed.gov/">NCES</a>. Never state exact tuition amounts without a verifiable source.
+
+If you do not have accurate salary or cost data for a topic, write:
+"Salary data varies by region and experience — check the <a href="https://www.bls.gov/ooh/">BLS Occupational Outlook Handbook</a> for current figures."
+Do NOT guess, estimate, or invent numbers.
+
+When referencing BLS salary data:
+- Use MEDIAN annual wages, not averages
+- Always note these are national medians (e.g., "the national median annual wage")
+- Include the year of the data (e.g., "according to BLS 2024 data")
+- NEVER round or adjust BLS figures — use the exact numbers from the source
+
+EXAMPLES OF WHAT TO DO:
+- CORRECT: "According to the <a href="https://www.bls.gov/ooh/healthcare/registered-nurses.htm">Bureau of Labor Statistics</a>, registered nurses earned a median annual wage of $86,070."
+- CORRECT: "Salary data varies by region and employer — check the <a href="https://www.bls.gov/ooh/">BLS Occupational Outlook Handbook</a> for current figures."
+- CORRECT: "Tuition for online programs varies widely; according to <a href="https://nces.ed.gov/">NCES data</a>, costs range from $X to $Y depending on institution type."
+
+EXAMPLES OF WHAT NEVER TO DO:
+- WRONG: "Social workers earn approximately $55,000 per year." (no source, no link)
+- WRONG: "The average salary for this role is around $72,000." (fabricated, uses "average" instead of "median")
+- WRONG: "Tuition typically costs $15,000 per year." (unsourced exact figure)
+- WRONG: "According to BLS, nurses earn $85,000." (plain text mention without hyperlink)
+
+=== END SALARY & COST DATA RULES ===
+`
+
     section += '\n=== END CONTENT RULES ===\n'
 
     return section
@@ -438,6 +478,64 @@ class GenerationService {
         this.logReasoningWarning('no_cost_data', 'No cost data found for this topic. Article may lack specific pricing information.', 'medium')
       }
 
+      // STAGE 0.5: Find cheapest client schools for affordability/cost-related articles
+      // This injects a prioritized list of the most affordable partner schools into the prompt
+      let cheapestSchoolsPrompt = null
+      const topicLower = (idea.title || '').toLowerCase()
+      const isCostRelatedTopic = (
+        topicLower.includes('affordable') ||
+        topicLower.includes('cheapest') ||
+        topicLower.includes('cost') ||
+        topicLower.includes('tuition') ||
+        topicLower.includes('budget') ||
+        topicLower.includes('inexpensive') ||
+        topicLower.includes('low-cost') ||
+        topicLower.includes('best buy') ||
+        topicLower.includes('most affordable')
+      )
+
+      if (isCostRelatedTopic) {
+        // Determine subject/level from the idea for filtering
+        let subject = null
+        let level = null
+
+        // Try to extract subject from seed topics or title
+        if (idea.seed_topics?.length > 0) {
+          subject = idea.seed_topics[0]
+        }
+
+        // Try to extract degree level from title
+        if (topicLower.includes('master') || topicLower.includes("master's") || topicLower.includes('mba')) {
+          level = 'master'
+        } else if (topicLower.includes('bachelor') || topicLower.includes("bachelor's")) {
+          level = 'bachelor'
+        } else if (topicLower.includes('associate')) {
+          level = 'associate'
+        } else if (topicLower.includes('doctorate') || topicLower.includes('phd')) {
+          level = 'doctorate'
+        }
+
+        const cheapestSchools = findCheapestClientSchools({
+          subject,
+          level,
+          limit: 5,
+        })
+
+        cheapestSchoolsPrompt = formatCheapestSchoolsForPrompt(cheapestSchools)
+
+        console.log(`[Generation] Cost-related topic detected. Found ${cheapestSchools.length} cheapest client schools.`)
+        this.logReasoning('cheapest_client_schools', {
+          is_cost_topic: true,
+          schools_found: cheapestSchools.length,
+          school_names: cheapestSchools.map(s => s.school_name),
+          filters_used: { subject, level },
+          has_pricing_data: cheapestSchools.some(s => s.avg_tuition_total !== null),
+          reasoning: cheapestSchools.some(s => s.avg_tuition_total !== null)
+            ? `Found ${cheapestSchools.length} cheapest client schools with pricing data for affordability article.`
+            : `Found ${cheapestSchools.length} client schools but no pricing data populated yet. Using unsorted fallback.`,
+        })
+      }
+
       this.updateProgress(onProgress, 'Auto-assigning contributor...', 10)
 
       // STAGE 1: Auto-assign contributor FIRST so we can use their profile in generation
@@ -474,11 +572,12 @@ class GenerationService {
         throw new Error('Draft generation step is disabled in pipeline configuration')
       }
 
-      // STAGE 2: Generate draft with Grok (includes cost data, author profile, AND content rules)
+      // STAGE 2: Generate draft with Grok (includes cost data, cheapest schools, author profile, AND content rules)
       const draftData = await this.grok.generateDraft(idea, {
         contentType,
         targetWordCount: effectiveTargetWordCount,
         costDataContext: costContext.promptText, // Pass cost data to prompt
+        cheapestSchoolsContext: cheapestSchoolsPrompt, // Pass cheapest client schools for affordability articles
         authorProfile: authorPrompt, // Pass comprehensive author profile
         authorName: contributor?.name,
         contentRulesContext: contentRulesPrompt, // NEW: Pass content rules to AI
@@ -510,6 +609,7 @@ class GenerationService {
           contentType,
           targetWordCount: targetWordCount + 200, // Request slightly longer to ensure completion
           costDataContext: costContext.promptText,
+          cheapestSchoolsContext: cheapestSchoolsPrompt, // Include cheapest schools in retry too
           authorProfile: authorPrompt,
           authorName: contributor?.name,
         })
@@ -650,8 +750,11 @@ class GenerationService {
 
       if (addInternalLinks && internalLinksEnabled) {
         // FIX #1: Pass topics for subject-aware matching
+        // FIX: Pass existing URLs from content to prevent duplicates at candidate selection level
+        const existingContentUrls = [...this.extractExistingUrls(humanizedContent)]
         const siteArticles = await this.getRelevantSiteArticles(draftData.title, 30, {
           topics: idea.seed_topics || [],
+          contentExistingUrls: existingContentUrls,
         })
         if (siteArticles.length >= 3) {
           finalContent = await this.addInternalLinksToContent(humanizedContent, siteArticles)
@@ -926,8 +1029,10 @@ class GenerationService {
         )
         if (hasLinkIssues && currentArticle.title) {
           try {
+            // FIX: Pass existing URLs from content to prevent duplicates at candidate selection level
+            const existingContentUrls = [...this.extractExistingUrls(currentArticle.content)]
             siteArticlesForFix = await this.getRelevantSiteArticles(
-              currentArticle.title, 10, { topics: currentArticle.topics || [] }
+              currentArticle.title, 10, { topics: currentArticle.topics || [], contentExistingUrls: existingContentUrls }
             )
           } catch (e) {
             console.warn('[QA Loop] Could not fetch site articles for auto-fix:', e)
@@ -970,86 +1075,130 @@ class GenerationService {
 
   /**
    * Auto-fix quality issues using Claude
+   * OVERHAULED: Provides explicit, actionable instructions per issue type
+   * so Claude actually makes the changes instead of returning content unchanged.
    */
   async autoFixQualityIssues(content, issues, siteArticles = []) {
-    const issueDescriptions = issues.map(issue => {
+    // Build extremely specific, actionable fix instructions per issue
+    const fixInstructions = issues.map(issue => {
       switch (issue.type) {
-        case 'word_count_low':
-          return '- Article is too short. Add 200-300 more words with valuable information.'
-        case 'word_count_high':
-          return '- Article is too long. Condense and remove unnecessary repetition.'
-        case 'missing_internal_links':
-          return '- Missing internal links to GetEducated. You MUST add internal links using the AVAILABLE ARTICLES listed below.'
+        case 'word_count_low': {
+          const currentWords = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(w => w.length > 0).length
+          const wordsNeeded = Math.max(1200 - currentWords, 300)
+          return `=== FIX: WORD COUNT TOO LOW ===
+Current: ~${currentWords} words. Target: 1200-2000 words. ADD at least ${wordsNeeded} more words.
+- Expand the introduction with 1-2 more context sentences
+- Add a new paragraph to at least 2 existing sections with deeper analysis
+- Expand the conclusion with actionable next steps
+DO NOT add filler. Every sentence must provide genuine value.`
+        }
+        case 'word_count_high': {
+          const currentWords2 = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(w => w.length > 0).length
+          return `=== FIX: WORD COUNT TOO HIGH ===
+Current: ~${currentWords2} words. Target: 1200-2000 words.
+- Remove redundant sentences, condense wordy phrases
+- DO NOT remove factual data, cost info, or key recommendations.`
+        }
+        case 'missing_internal_links': {
+          if (siteArticles.length > 0) {
+            const linkInsertions = siteArticles.slice(0, 5).map((a, i) => {
+              const typeLabel = (a.pageType === 'berp') ? '[BERP]' :
+                                (a.pageType === 'rank') ? '[RANKING]' :
+                                (a.pageType === 'school') ? '[SCHOOL]' :
+                                '[ARTICLE]'
+              return `  ${i + 1}. ${typeLabel} Insert <a href="${a.url}">${a.title}</a> by wrapping relevant anchor text in a paragraph`
+            }).join('\n')
+            return `=== FIX: MISSING INTERNAL LINKS ===
+Add at least 3 internal links. Use these EXACT URLs (prioritize BERP, RANKING, and SCHOOL pages over ARTICLE pages):
+${linkInsertions}
+Insert as <a href="URL">natural anchor text</a> in paragraph text. Distribute throughout, NOT in headings.`
+          }
+          return `=== FIX: MISSING INTERNAL LINKS ===
+Add 3-5 internal links to geteducated.com pages as <a> tags within paragraph text. Prioritize school/program pages and ranking pages over generic blog posts.`
+        }
         case 'missing_external_links':
-          return '- Missing external citations. You MUST embed 1-2 hyperlinks to authoritative sources like Bureau of Labor Statistics (https://www.bls.gov/ooh/) or NCES (https://nces.ed.gov/). Use REAL URLs from these domains and embed them as <a> tags in the text.'
+          return `=== FIX: MISSING EXTERNAL CITATIONS ===
+MUST embed at least 2 external hyperlinks as <a> tags in the article body.
+1. Find salary/job outlook mentions and ADD: <a href="https://www.bls.gov/ooh/">Bureau of Labor Statistics</a>
+   For specific careers use the specific BLS OOH page URL.
+2. Find education stats mentions and ADD: <a href="https://nces.ed.gov/">NCES</a>
+3. If no such mentions exist, ADD a sentence citing BLS data for the article topic WITH an embedded link.
+NEVER mention BLS or NCES as plain text without a clickable <a> tag.`
         case 'missing_faqs':
-          return '- Missing FAQ section. Add 3 relevant questions and answers using <h2>Frequently Asked Questions</h2> followed by <h3> for questions and <p> for answers.'
+          return `=== FIX: MISSING FAQ SECTION ===
+Add before conclusion: <h2>Frequently Asked Questions</h2> with 3+ <h3>question</h3><p>answer</p> pairs.`
         case 'weak_headings':
-          return '- Weak heading structure. Add 2-3 more H2 subheadings to break up content.'
+          return `=== FIX: WEAK HEADING STRUCTURE ===
+Add H2/H3 hierarchy. Aim for 4-6 descriptive, keyword-rich H2 headings. Never skip levels.`
         case 'poor_readability':
-          return '- Poor readability. Shorten some long sentences and use simpler language.'
+          return `=== FIX: POOR READABILITY ===
+Split sentences over 25 words. Replace jargon with simpler words. Break long paragraphs.`
         case 'triplicates':
-          return '- Too many triplicate patterns (listing exactly 3 items). Rewrite some "X, Y, and Z" patterns to use 2 items or 4+ items instead. Vary the sentence structure.'
+          return `=== FIX: TOO MANY TRIPLICATE PATTERNS ===
+Find "X, Y, and Z" patterns and rewrite 80%+ of them. Use pairs, 4+ item lists, or single-item focus. Max 2 triplicates allowed.`
+        case 'bannedLinks':
+          return `=== FIX: BANNED LINKS ===
+Remove .edu and competitor links (onlineu.com, usnews.com, bestcolleges.com, niche.com). Replace with GetEducated school pages or approved sources (bls.gov, nces.ed.gov).`
         default:
-          return `- ${issue.type}: ${issue.severity} issue`
+          return `=== FIX: ${issue.type} ===\n${issue.description || issue.severity + ' issue'}`
       }
-    }).join('\n')
+    }).join('\n\n')
 
-    // Build site articles context for internal linking
+    // Build site articles context with type labels for link priority
     let internalLinksContext = ''
     if (siteArticles.length > 0) {
-      internalLinksContext = `\n\nAVAILABLE ARTICLES FOR INTERNAL LINKING (you MUST use 3-5 of these):\n${siteArticles.map(a => `- [${a.title}](${a.url})`).join('\n')}\n\nWhen adding internal links, use HTML: <a href="URL">natural anchor text</a>\nDistribute links throughout the article, not clustered together.`
+      internalLinksContext = `\n\n=== AVAILABLE GETEDUCATED ARTICLES FOR LINKING (prioritize SCHOOL/RANKING pages over blog posts) ===\n${siteArticles.map((a, i) => {
+        const typeLabel = (a.pageType === 'berp') ? '[BERP]' :
+                          (a.pageType === 'rank') ? '[RANKING]' :
+                          (a.pageType === 'school') ? '[SCHOOL]' :
+                          '[ARTICLE]'
+        return `${i + 1}. ${typeLabel} ${a.url} - ${a.title}`
+      }).join('\n')}\n=== END ARTICLES ===`
     }
 
-    const prompt = `You are reviewing an article and need to fix the following quality issues:
+    const prompt = `You are a content editor. Fix the specific quality issues below. You MUST make the actual changes, not return content unchanged.
 
-QUALITY ISSUES TO FIX:
-${issueDescriptions}
+=== ISSUES TO FIX ===
+${fixInstructions}
+=== END ISSUES ===
 ${internalLinksContext}
 
-CURRENT ARTICLE CONTENT:
+=== COST DATA ACCURACY ===
+- NEVER use per-credit-hour costs as total program costs
+- Always specify: per-credit cost vs. total program cost
+- If uncertain, write "costs vary" and link to the ranking page
+- For degree-completion programs, credit requirements are typically 30-60, NOT 120+
+=== END COST RULES ===
+
+=== TRIPLICATE RULES ===
+- Max 2 "X, Y, and Z" patterns per article. Rewrite 80%+ using pairs, 4+ lists, or single focus.
+=== END TRIPLICATE RULES ===
+
+=== CURRENT ARTICLE ===
 ${content}
+=== END ARTICLE ===
 
-=== CRITICAL HTML FORMATTING RULES ===
+=== HTML RULES ===
+Output properly formatted HTML: <h2>, <h3>, <p>, <ul>/<li>, <a href="...">, <strong>, <em>.
+NEVER output plain text without tags.
+=== END HTML RULES ===
 
-Your output MUST be properly formatted HTML with:
-1. <h2> tags for major section headings
-2. <h3> tags for subsections
-3. <p> tags wrapping EVERY paragraph of text
-4. <ul> and <li> tags for bulleted lists
-5. <ol> and <li> tags for numbered lists
-6. <strong> or <b> tags for bold text
-7. <em> or <i> tags for italic text
-8. <a href="..."> tags for any links
+=== TABLE PRESERVATION (CRITICAL) ===
+If the article contains HTML tables (<table>...</table>), you MUST preserve their COMPLETE structure:
+- Keep all <table>, <thead>, <tbody>, <tr>, <th>, <td> tags exactly as they appear
+- Keep all table attributes (border, style, class, cellpadding, cellspacing, etc.)
+- Only modify text WITHIN cells if a specific fix requires it
+- NEVER convert tables to bullet lists, paragraphs, or plain text
+- NEVER remove table borders, headers, or styling
+=== END TABLE PRESERVATION ===
 
-NEVER output plain text without HTML tags. Every paragraph MUST be wrapped in <p> tags.
+=== EXTERNAL LINK EMBEDDING (MANDATORY) ===
+When mentioning Bureau of Labor Statistics, ALWAYS embed as: <a href="https://www.bls.gov/ooh/">Bureau of Labor Statistics</a>
+When mentioning NCES, ALWAYS embed as: <a href="https://nces.ed.gov/">NCES</a>
+NEVER mention BLS, NCES, or Department of Education as plain text — they MUST be clickable <a> tags.
+=== END EXTERNAL LINK RULES ===
 
-=== END HTML FORMATTING RULES ===
-
-=== EXTERNAL LINK GUIDELINES ===
-For external citations, use ONLY these approved source domains:
-- Bureau of Labor Statistics: https://www.bls.gov/ooh/ (for career outlook, salaries)
-- NCES: https://nces.ed.gov/ (for education statistics)
-- Department of Education: https://www.ed.gov/
-- Official accreditation bodies
-
-NEVER link to: .edu domains, onlineu.com, usnews.com, bestcolleges.com, niche.com, or any competitor sites.
-
-When adding external links, embed them naturally in the text:
-Example: <p>According to the <a href="https://www.bls.gov/ooh/healthcare/registered-nurses.htm">Bureau of Labor Statistics</a>, registered nurses earn a median annual salary of $81,220.</p>
-
-=== END EXTERNAL LINK GUIDELINES ===
-
-INSTRUCTIONS:
-1. Fix ALL the issues listed above
-2. For internal links: Use the AVAILABLE ARTICLES listed above - pick the most relevant ones
-3. For external links: Use REAL URLs from BLS, NCES, or .gov sites embedded as hyperlinks in the text
-4. Maintain the article's overall tone and message
-5. Keep the existing heading structure unless adding new headings
-6. Do NOT remove existing content unless consolidating
-7. Ensure all HTML tags are properly closed and all new content is properly HTML formatted
-
-OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
+CRITICAL: Actually make the changes. OUTPUT ONLY THE COMPLETE FIXED HTML. No explanations, no markdown fences.`
 
     try {
       const fixedContent = await this.claude.chat([
@@ -1425,7 +1574,7 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
    * Falls back to legacy site_articles if GetEducated catalog is empty
    */
   async getRelevantSiteArticles(articleTitle, limit = 30, options = {}) {
-    const { subjectArea, degreeLevel, excludeUrls = [], topics = [] } = options
+    const { subjectArea, degreeLevel, excludeUrls = [], topics = [], contentExistingUrls = [] } = options
 
     try {
       // FIX #1: Use subject-aware matching to prevent irrelevant links
@@ -1458,47 +1607,23 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
       // Step 3: Filter out excluded URLs
       const candidates = geArticles.filter(a => !excludeUrls.includes(a.url))
 
-      // Step 4: Score using subject-aware algorithm
+      // Step 4: Score using subject-aware algorithm with page type multipliers
       // This HEAVILY penalizes unrelated subjects (e.g., Religion vs Business = -200)
+      // AND applies page type multipliers: BERP x4, Rank x3, Article x1, School x0.5
       const scoredArticles = scoreArticlesForLinking(candidates, articleTitle, topics)
 
-      // Step 4.5: Boost scores based on content type priority
-      // Priority: BERPs (degree_category) > Rankings > Articles > Schools
-      const CONTENT_TYPE_BOOST = {
-        'degree_category': 100,  // BERPs pages - highest priority
-        'ranking': 80,           // Ranking/comparison pages
-        'career': 40,            // Career guides
-        'guide': 30,             // General guides
-        'how_to': 30,            // How-to articles
-        'listicle': 20,          // List articles
-        'explainer': 20,         // Explainers
-        'blog': 10,              // Blog posts
-        'school_profile': 5,     // School pages - lowest
-        'scholarship': 5,        // Scholarship pages
-        'other': 0,
-      }
-
-      scoredArticles.forEach(article => {
-        const boost = CONTENT_TYPE_BOOST[article.content_type] || 0
-        article.relevanceScore = (article.relevanceScore || 0) + boost
-        if (boost > 0) {
-          article.scoringReasons = article.scoringReasons || []
-          article.scoringReasons.push(`+${boost} content type boost (${article.content_type})`)
-        }
-      })
-
-      // Re-sort after boosting
-      scoredArticles.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
-
-      // Step 5: Take top results (already filtered to remove negative scores)
-      const results = scoredArticles.slice(0, 5)
+      // Step 5: Select top results with page type diversity
+      // Uses selectDiverseLinks to ensure a mix of BERPs, Ranks, and Articles
+      // instead of all-articles results
+      // Also passes contentExistingUrls to exclude URLs already in the article content
+      const results = selectDiverseLinks(scoredArticles, 5, { excludeUrls: contentExistingUrls })
 
       if (results.length > 0) {
-        console.log(`[Generation] Selected ${results.length} relevant articles:`)
+        console.log(`[Generation] Selected ${results.length} relevant articles (with page type diversity):`)
         results.forEach((a, i) => {
-          console.log(`  ${i + 1}. "${a.title}" (score: ${a.relevanceScore}, subject: ${a.articleSubject || 'unknown'})`)
+          console.log(`  ${i + 1}. [${(a.pageType || 'article').toUpperCase()}] "${a.title}" (score: ${a.relevanceScore}, base: ${a.baseScore}, subject: ${a.articleSubject || 'unknown'})`)
           if (a.scoringReasons?.length > 0) {
-            console.log(`     Reasons: ${a.scoringReasons.slice(0, 3).join('; ')}`)
+            console.log(`     Reasons: ${a.scoringReasons.slice(0, 4).join('; ')}`)
           }
         })
 
@@ -1509,13 +1634,22 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
           candidates_fetched: geArticles.length,
           candidates_after_filter: candidates.length,
           results_selected: results.length,
+          page_type_mix: results.reduce((acc, a) => {
+            const t = a.pageType || 'article'
+            acc[t] = (acc[t] || 0) + 1
+            return acc
+          }, {}),
           top_results: results.map(a => ({
             title: a.title,
             url: a.url,
             score: a.relevanceScore,
+            baseScore: a.baseScore,
+            pageType: a.pageType,
+            pageTypeMultiplier: a.pageTypeMultiplier,
+            clientBoost: a.clientBoost,
             subject: a.articleSubject,
             match_type: a.subjectMatch,
-            reasons: a.scoringReasons?.slice(0, 3),
+            reasons: a.scoringReasons?.slice(0, 4),
           })),
         })
 
@@ -1527,6 +1661,7 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
           topics: a.topics,
           content_type: a.content_type,
           subject_area: a.subject_area,
+          pageType: a.pageType,
           relevanceScore: a.relevanceScore,
         }))
       }
@@ -1604,28 +1739,168 @@ OUTPUT ONLY THE COMPLETE FIXED HTML CONTENT (no explanations or commentary).`
   }
 
   /**
+   * Extract all GetEducated URLs already present in HTML content.
+   * Returns normalized URLs for comparison.
+   * @param {string} content - HTML content
+   * @returns {Set<string>} Set of normalized URLs found in content
+   */
+  extractExistingUrls(content) {
+    const existingUrls = new Set()
+    if (!content) return existingUrls
+
+    try {
+      const links = extractLinksFromContent(content)
+      for (const link of links) {
+        if (link.url && link.url.includes('geteducated.com')) {
+          existingUrls.add(normalizeUrl(link.url))
+        }
+      }
+    } catch (error) {
+      // Fallback: simple regex extraction if linkValidator fails
+      console.warn('[Generation] extractLinks fallback to regex:', error.message)
+      const hrefRegex = /href=["']([^"']*geteducated\.com[^"']*)["']/gi
+      let match
+      while ((match = hrefRegex.exec(content)) !== null) {
+        existingUrls.add(normalizeUrl(match[1]))
+      }
+    }
+
+    return existingUrls
+  }
+
+  /**
+   * Filter candidate articles to remove any whose URL is already in the content.
+   * @param {Object[]} candidates - Array of article objects with url property
+   * @param {Set<string>} existingUrls - Set of normalized URLs already in content
+   * @returns {Object[]} Filtered candidates
+   */
+  filterAlreadyLinkedCandidates(candidates, existingUrls) {
+    if (!existingUrls || existingUrls.size === 0) return candidates
+
+    const filtered = candidates.filter(article => {
+      const norm = normalizeUrl(article.url)
+      if (existingUrls.has(norm)) {
+        console.log(`[Generation] Skipping already-linked candidate: ${article.url}`)
+        return false
+      }
+      return true
+    })
+
+    const removed = candidates.length - filtered.length
+    if (removed > 0) {
+      console.log(`[Generation] Filtered out ${removed} candidate(s) whose URLs are already in the article`)
+    }
+
+    return filtered
+  }
+
+  /**
+   * Remove duplicate link tags from HTML content.
+   * If the same GetEducated URL appears in multiple <a> tags, keep only the first occurrence
+   * and remove subsequent duplicates (replacing the <a> tag with just its anchor text).
+   * @param {string} content - HTML content with links
+   * @returns {{ content: string, duplicatesRemoved: number }} Cleaned content and count of removed duplicates
+   */
+  removeDuplicateLinks(content) {
+    if (!content) return { content, duplicatesRemoved: 0 }
+
+    let duplicatesRemoved = 0
+    const seenUrls = new Set()
+
+    // Match all <a> tags with GetEducated URLs
+    const result = content.replace(
+      /<a\s+[^>]*href=["']([^"']*geteducated\.com[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi,
+      (fullMatch, url, anchorText) => {
+        const norm = normalizeUrl(url)
+        if (seenUrls.has(norm)) {
+          // Duplicate - replace <a> tag with just the anchor text
+          duplicatesRemoved++
+          console.warn(`[Generation] Removed duplicate link: ${url} (kept first occurrence)`)
+          return anchorText
+        }
+        seenUrls.add(norm)
+        return fullMatch
+      }
+    )
+
+    if (duplicatesRemoved > 0) {
+      console.warn(`[Generation] Removed ${duplicatesRemoved} duplicate internal link(s) from content`)
+    }
+
+    return { content: result, duplicatesRemoved }
+  }
+
+  /**
+   * Build a prompt section listing client school GetEducated page URLs
+   * that are mentioned (by name) in the article content. This encourages
+   * the AI to link those school mentions to their GetEducated pages.
+   *
+   * @param {string} content - Article HTML content
+   * @returns {string} Prompt section text (empty string if no matches)
+   */
+  _buildClientSchoolLinksForPrompt(content) {
+    if (!content || !CLIENT_SCHOOLS || CLIENT_SCHOOLS.length === 0) return ''
+
+    const contentLower = content.toLowerCase()
+    const mentionedSchools = CLIENT_SCHOOLS.filter(school => {
+      const nameLower = (school.school_name || '').toLowerCase()
+      return nameLower && contentLower.includes(nameLower)
+    })
+
+    if (mentionedSchools.length === 0) return ''
+
+    const schoolLines = mentionedSchools.map(s =>
+      `- [SCHOOL/PROGRAM PAGE] [${s.school_name}](https://www.geteducated.com${s.geteducated_url})`
+    ).join('\n')
+
+    return `\n=== CLIENT SCHOOL PAGES (HIGH PRIORITY - link when these schools are mentioned) ===
+If any of these client schools are mentioned in the article, you MUST link them to their GetEducated page:
+${schoolLines}
+=== END CLIENT SCHOOL PAGES ===\n`
+  }
+
+  /**
    * Add internal links to content using Claude
    */
   async addInternalLinksToContent(content, siteArticles) {
+    // Level 1: Extract URLs already present in the content and filter candidates
+    const existingUrls = this.extractExistingUrls(content)
+    const filteredArticles = this.filterAlreadyLinkedCandidates(siteArticles, existingUrls)
+
+    if (filteredArticles.length === 0) {
+      console.log('[Generation] All candidate URLs are already in the article - skipping link insertion')
+      return content
+    }
+
+    // Build the "already linked" warning for Claude
+    const alreadyLinkedWarning = existingUrls.size > 0
+      ? `\n=== ALREADY LINKED URLs (DO NOT add these again) ===\nThe following URLs are ALREADY present in the article. Do NOT insert them again:\n${[...existingUrls].map(u => `- ${u}`).join('\n')}\n=== END ALREADY LINKED ===\n`
+      : ''
+
+    // Build client school links section for the prompt
+    const clientSchoolLinks = this._buildClientSchoolLinksForPrompt(content)
+
     const prompt = `Add 3-5 contextual internal links to this article content.
 
 ARTICLE CONTENT:
 ${content}
-
+${alreadyLinkedWarning}
 AVAILABLE ARTICLES TO LINK TO (listed in priority order - prefer items near the top):
-${siteArticles.map(a => {
-  const typeLabel = a.content_type === 'degree_category' ? '[BERP PAGE]' :
-                    a.content_type === 'ranking' ? '[RANKING]' :
-                    a.content_type === 'school_profile' ? '[SCHOOL]' :
+${filteredArticles.map(a => {
+  // Use pageType from scoring if available, otherwise fall back to content_type
+  const typeLabel = (a.pageType === 'berp' || a.content_type === 'degree_category') ? '[BERP PAGE]' :
+                    (a.pageType === 'rank' || a.content_type === 'ranking') ? '[RANKING]' :
+                    (a.pageType === 'school' || a.content_type === 'school_profile') ? '[SCHOOL/PROGRAM PAGE]' :
                     '[ARTICLE]'
   return `- ${typeLabel} [${a.title}](${a.url})`
 }).join('\n')}
-
+${clientSchoolLinks}
 === LINKING PRIORITY RULES ===
-1. PREFER linking to [BERP PAGE] (Browse Education Results Pages) - these are degree directory pages like /online-degrees/subject/level/
-2. SECOND PRIORITY: [RANKING] pages - these are ranking/comparison pages
-3. THIRD PRIORITY: [ARTICLE] pages - general content articles
-4. LOWEST PRIORITY: [SCHOOL] pages - individual school profiles
+1. HIGHEST PRIORITY: [BERP PAGE] (Browse Education Results Pages) - degree directory pages like /online-degrees/subject/level/
+2. SECOND PRIORITY: [RANKING] pages - ranking/comparison pages (e.g., /online-college-ratings/...)
+3. THIRD PRIORITY: [SCHOOL/PROGRAM PAGE] pages - individual school and program profile pages (e.g., /online-schools/school-name/)
+4. LOWEST PRIORITY: [ARTICLE] pages - generic blog posts and articles
+IMPORTANT: Always prioritize linking to GetEducated school and program pages over generic blog posts. School/program pages drive more SEO value and reader engagement.
 
 === CRITICAL HTML FORMATTING RULES ===
 
@@ -1649,11 +1924,12 @@ INSTRUCTIONS:
 4. Use HTML format: <a href="URL">anchor text</a>
 5. Aim for 3-5 links total
 6. Preserve all existing HTML formatting and existing links
+7. Do NOT add a link to any URL that already appears in the article
 
 OUTPUT ONLY THE UPDATED HTML CONTENT with links added.`
 
     try {
-      const linkedContent = await this.claude.chat([
+      let linkedContent = await this.claude.chat([
         {
           role: 'user',
           content: prompt
@@ -1663,7 +1939,13 @@ OUTPUT ONLY THE UPDATED HTML CONTENT with links added.`
         max_tokens: 8000,
       })
 
-      return linkedContent
+      // Level 3: Post-insertion deduplication - remove any duplicate URLs Claude may have inserted
+      const { content: dedupedContent, duplicatesRemoved } = this.removeDuplicateLinks(linkedContent)
+      if (duplicatesRemoved > 0) {
+        this.logReasoningWarning('duplicate_links_removed', `Removed ${duplicatesRemoved} duplicate internal link(s) after Claude insertion`, 'low')
+      }
+
+      return dedupedContent
 
     } catch (error) {
       console.error('Error adding internal links:', error)
@@ -1681,24 +1963,38 @@ OUTPUT ONLY THE UPDATED HTML CONTENT with links added.`
   ensureProperHtmlFormatting(content) {
     if (!content) return content
 
+    // Protect table blocks from being mangled by the formatter.
+    // Extract them, replace with placeholders, restore after processing.
+    const tableBlocks = []
+    let protectedContent = content.replace(/<table[\s\S]*?<\/table>/gi, (match) => {
+      tableBlocks.push(match)
+      return `<!--TABLE_PLACEHOLDER_${tableBlocks.length - 1}-->`
+    })
+
     // Check if content already has proper HTML structure
-    const hasParagraphTags = /<p[^>]*>/i.test(content)
-    const hasHeadingTags = /<h[23][^>]*>/i.test(content)
+    const hasParagraphTags = /<p[^>]*>/i.test(protectedContent)
+    const hasHeadingTags = /<h[23][^>]*>/i.test(protectedContent)
 
     // If content has HTML structure, just do minor cleanup
     if (hasParagraphTags && hasHeadingTags) {
       // Ensure there's proper spacing between elements
-      return content
+      let result = protectedContent
         .replace(/(<\/h[23]>)(?!\s*<)/gi, '$1\n\n')  // Add newlines after headings
         .replace(/(<\/p>)(?!\s*<)/gi, '$1\n\n')      // Add newlines after paragraphs
         .replace(/(<\/ul>)(?!\s*<)/gi, '$1\n\n')     // Add newlines after lists
         .replace(/(<\/ol>)(?!\s*<)/gi, '$1\n\n')     // Add newlines after lists
+
+      // Restore table blocks
+      tableBlocks.forEach((table, i) => {
+        result = result.replace(`<!--TABLE_PLACEHOLDER_${i}-->`, table)
+      })
+      return result
     }
 
     // Content is missing proper HTML - attempt to fix it
     console.warn('[Generation] Content missing proper HTML formatting - attempting to fix')
 
-    let fixed = content
+    let fixed = protectedContent
 
     // Split by obvious paragraph breaks (multiple newlines or <br><br>)
     const paragraphSplitters = /\n\s*\n|<br\s*\/?>\s*<br\s*\/?>/gi
@@ -1718,8 +2014,8 @@ OUTPUT ONLY THE UPDATED HTML CONTENT with links added.`
         !segment.endsWith('?') &&
         !segment.endsWith('!')
 
-      // If already wrapped in tags, leave as is
-      if (/^<(h[123456]|p|ul|ol|div)/i.test(segment)) {
+      // If already wrapped in tags (including table placeholders), leave as is
+      if (/^<(h[123456]|p|ul|ol|div|table|blockquote)/i.test(segment) || /^<!--TABLE_PLACEHOLDER_/.test(segment)) {
         return segment
       }
 
@@ -1754,6 +2050,11 @@ OUTPUT ONLY THE UPDATED HTML CONTENT with links added.`
 
     // Join with proper spacing
     fixed = processedSegments.filter(s => s).join('\n\n')
+
+    // Restore table blocks
+    tableBlocks.forEach((table, i) => {
+      fixed = fixed.replace(`<!--TABLE_PLACEHOLDER_${i}-->`, table)
+    })
 
     console.log('[Generation] HTML formatting fixed')
     return fixed
@@ -1892,8 +2193,23 @@ INSTRUCTIONS:
 3. Vary sentence length and structure for better flow
 4. Remove any robotic or formulaic phrases
 5. Add personality while keeping professionalism
-6. Keep all HTML formatting intact
+6. Keep all HTML formatting intact, especially tables
 7. Do NOT add new sections or significantly expand content
+8. Ensure all source citations (BLS, NCES, etc.) are embedded as clickable <a> hyperlinks
+
+=== TABLE PRESERVATION (CRITICAL) ===
+If the content contains HTML tables, PRESERVE their COMPLETE structure:
+- Keep all <table>, <thead>, <tbody>, <tr>, <th>, <td> tags exactly as they appear
+- Keep all table attributes (border, style, class, cellpadding, cellspacing, etc.)
+- Only modify text WITHIN cells if needed for humanization
+- NEVER convert tables to bullet lists, paragraphs, or plain text
+=== END TABLE PRESERVATION ===
+
+=== EXTERNAL LINK EMBEDDING (MANDATORY) ===
+When mentioning Bureau of Labor Statistics, ALWAYS embed as: <a href="https://www.bls.gov/ooh/">Bureau of Labor Statistics</a>
+When mentioning NCES, ALWAYS embed as: <a href="https://nces.ed.gov/">NCES</a>
+NEVER mention BLS, NCES, or Department of Education as plain text — they MUST be clickable <a> tags.
+=== END EXTERNAL LINK RULES ===
 
 OUTPUT ONLY THE HUMANIZED HTML CONTENT.`
 
@@ -2407,8 +2723,11 @@ OUTPUT ONLY THE HUMANIZED HTML CONTENT.`
 
         if (existingLinks < minLinks) {
           // FIX #1: Pass topics for subject-aware matching
+          // FIX: Pass existing URLs from content to prevent duplicates at candidate selection level
+          const existingContentUrls = [...this.extractExistingUrls(content)]
           const siteArticles = await this.getRelevantSiteArticles(article.title, 30, {
             topics: article.topics || article.seed_topics || [],
+            contentExistingUrls: existingContentUrls,
           })
           if (siteArticles.length >= 2) {
             const linksToAdd = minLinks - existingLinks
@@ -2560,36 +2879,72 @@ OUTPUT ONLY THE HUMANIZED HTML CONTENT.`
    * @returns {string} - Updated content
    */
   async addInternalLinksToContentPreserving(content, siteArticles, linksToAdd = 3) {
-    const prompt = `Add ${linksToAdd} contextual internal links to this article.
+    // Level 1: Extract URLs already present in the content and filter candidates
+    const existingUrls = this.extractExistingUrls(content)
+    const filteredArticles = this.filterAlreadyLinkedCandidates(siteArticles, existingUrls)
+
+    if (filteredArticles.length === 0) {
+      console.log('[Generation] All candidate URLs are already in the article - skipping preserving link insertion')
+      return content
+    }
+
+    // Adjust linksToAdd if we have fewer candidates than requested
+    const effectiveLinksToAdd = Math.min(linksToAdd, filteredArticles.length)
+
+    // Build the "already linked" warning for Claude
+    const alreadyLinkedWarning = existingUrls.size > 0
+      ? `\nIMPORTANT - ALREADY LINKED URLs (DO NOT add these again):\n${[...existingUrls].map(u => `- ${u}`).join('\n')}\n`
+      : ''
+
+    // Build client school links section for the prompt
+    const clientSchoolLinks = this._buildClientSchoolLinksForPrompt(content)
+
+    const prompt = `Add ${effectiveLinksToAdd} contextual internal links to this article.
 
 IMPORTANT: Only add links where they naturally fit. Do NOT rewrite any prose.
 
 ARTICLE CONTENT:
 ${content}
-
-AVAILABLE ARTICLES TO LINK TO (pick ${linksToAdd} most relevant):
-${siteArticles.slice(0, 10).map(a => `- [${a.title}](${a.url})`).join('\n')}
+${alreadyLinkedWarning}
+AVAILABLE ARTICLES TO LINK TO (pick ${effectiveLinksToAdd} most relevant):
+${filteredArticles.slice(0, 10).map(a => {
+  const typeLabel = (a.pageType === 'berp' || a.content_type === 'degree_category') ? '[BERP]' :
+                    (a.pageType === 'rank' || a.content_type === 'ranking') ? '[RANKING]' :
+                    (a.pageType === 'school' || a.content_type === 'school_profile') ? '[SCHOOL]' :
+                    '[ARTICLE]'
+  return `- ${typeLabel} [${a.title}](${a.url})`
+}).join('\n')}
+${clientSchoolLinks}
+LINK PRIORITY: Prefer school/program pages and ranking pages over generic blog posts. URLs containing /online-college-ratings/, /online-schools/, /online-degrees/, /programs/, or /degrees/ should be chosen before /blog/ or other generic article pages.
 
 RULES:
-1. Add EXACTLY ${linksToAdd} links, no more, no fewer
+1. Add EXACTLY ${effectiveLinksToAdd} links, no more, no fewer
 2. Use natural anchor text (1-5 words from existing text)
 3. Do NOT change any other text or structure
 4. Use HTML format: <a href="URL">existing text</a>
 5. Choose link placements that make sense contextually
 6. Distribute links throughout the article
+7. Do NOT add a link to any URL that already appears in the article
+8. Prioritize [BERP], [RANKING], and [SCHOOL] pages over [ARTICLE] pages
 
-OUTPUT ONLY THE UPDATED CONTENT with the ${linksToAdd} new links added.
+OUTPUT ONLY THE UPDATED CONTENT with the ${effectiveLinksToAdd} new links added.
 Do not include any explanation or commentary.`
 
     try {
-      const linkedContent = await this.claude.chat([
+      let linkedContent = await this.claude.chat([
         { role: 'user', content: prompt }
       ], {
         temperature: 0.3, // Lower temperature for more conservative changes
         max_tokens: 4500,
       })
 
-      return linkedContent
+      // Level 3: Post-insertion deduplication - remove any duplicate URLs Claude may have inserted
+      const { content: dedupedContent, duplicatesRemoved } = this.removeDuplicateLinks(linkedContent)
+      if (duplicatesRemoved > 0) {
+        this.logReasoningWarning('duplicate_links_removed_preserving', `Removed ${duplicatesRemoved} duplicate internal link(s) after preserving insertion`, 'low')
+      }
+
+      return dedupedContent
 
     } catch (error) {
       console.error('[Compliance] Error adding internal links:', error)
@@ -2910,6 +3265,22 @@ INSTRUCTIONS:
 3. Maintain the article structure and voice
 4. Keep all HTML formatting intact and ensure all new content is properly HTML formatted
 5. Do not add unrelated content
+6. Ensure all source citations (BLS, NCES, etc.) are embedded as clickable <a> hyperlinks
+
+=== TABLE PRESERVATION (CRITICAL) ===
+If the content contains HTML tables (<table>...</table>), you MUST preserve their COMPLETE structure:
+- Keep all <table>, <thead>, <tbody>, <tr>, <th>, <td> tags exactly as they appear
+- Keep all table attributes (border, style, class, cellpadding, cellspacing, etc.)
+- Only modify text WITHIN cells if a specific fix requires it
+- NEVER convert tables to bullet lists, paragraphs, or plain text
+- NEVER remove table borders, headers, or styling
+=== END TABLE PRESERVATION ===
+
+=== EXTERNAL LINK EMBEDDING (MANDATORY) ===
+When mentioning Bureau of Labor Statistics, ALWAYS embed as: <a href="https://www.bls.gov/ooh/">Bureau of Labor Statistics</a>
+When mentioning NCES, ALWAYS embed as: <a href="https://nces.ed.gov/">NCES</a>
+NEVER mention BLS, NCES, or Department of Education as plain text — they MUST be clickable <a> tags.
+=== END EXTERNAL LINK RULES ===
 
 OUTPUT ONLY THE FIXED HTML CONTENT.`
 
@@ -3006,10 +3377,12 @@ OUTPUT ONLY THE FIXED HTML CONTENT.`
 
     // Refresh internal links if needed
     try {
+      // FIX: Pass existing URLs from content to prevent duplicates at candidate selection level
+      const existingContentUrls = [...this.extractExistingUrls(updatedContent)]
       const relevantArticles = await this.getRelevantSiteArticles(
         article.title,
         30,
-        { topics: article.topics || [] }
+        { topics: article.topics || [], contentExistingUrls: existingContentUrls }
       )
 
       if (relevantArticles.length > 0) {

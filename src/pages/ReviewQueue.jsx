@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useAllRevisions } from '@/hooks/useArticleRevisions'
 import { useDeleteArticleWithReason } from '@/hooks/useDeletionLog'
 import { usePublishArticle } from '@/hooks/usePublish'
+import { calculateQualityScore, getQualityThresholds } from '@/services/qualityScoreService'
 import { DeleteWithReasonModal } from '@/components/ui/DeleteWithReasonModal'
 
 // UI Components
@@ -221,7 +222,21 @@ export default function ReviewQueue() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      return data || []
+
+      // Recalculate quality scores client-side to ensure they match the editor's real-time calculation
+      const thresholds = await getQualityThresholds()
+      const articles = (data || []).map(article => {
+        if (article.content) {
+          const result = calculateQualityScore(article.content, article, thresholds)
+          if (result.score !== article.quality_score) {
+            // Update stale DB score in background (fire-and-forget)
+            supabase.from('articles').update({ quality_score: result.score }).eq('id', article.id)
+          }
+          return { ...article, quality_score: result.score }
+        }
+        return article
+      })
+      return articles
     },
     enabled: !!user,
     refetchOnMount: 'always', // Always refetch when navigating back to this page

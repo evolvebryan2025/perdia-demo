@@ -5,6 +5,10 @@ import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
 import TextAlign from '@tiptap/extension-text-align'
 import Underline from '@tiptap/extension-underline'
+import { Table } from '@tiptap/extension-table'
+import { TableRow } from '@tiptap/extension-table-row'
+import { TableHeader } from '@tiptap/extension-table-header'
+import { TableCell } from '@tiptap/extension-table-cell'
 import { useEffect, useCallback } from 'react'
 import {
   Bold,
@@ -290,6 +294,27 @@ export function RichTextEditor({
         types: ['heading', 'paragraph'],
       }),
       Underline,
+      Table.configure({
+        resizable: false,
+        HTMLAttributes: {
+          class: 'border-collapse w-full my-4',
+        },
+      }),
+      TableRow.configure({
+        HTMLAttributes: {
+          class: 'border border-gray-300',
+        },
+      }),
+      TableHeader.configure({
+        HTMLAttributes: {
+          class: 'border border-gray-300 bg-gray-100 px-3 py-2 text-left font-semibold',
+        },
+      }),
+      TableCell.configure({
+        HTMLAttributes: {
+          class: 'border border-gray-300 px-3 py-2',
+        },
+      }),
     ],
     content: value,
     editable,
@@ -308,6 +333,9 @@ export function RichTextEditor({
           'prose-ul:list-disc prose-ol:list-decimal',
           'prose-blockquote:border-l-4 prose-blockquote:border-gray-300 prose-blockquote:pl-4 prose-blockquote:italic',
           'prose-code:bg-gray-100 prose-code:px-1 prose-code:rounded prose-code:text-sm',
+          'prose-table:border-collapse prose-table:w-full prose-table:my-4',
+          'prose-th:border prose-th:border-gray-300 prose-th:bg-gray-100 prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:font-semibold',
+          'prose-td:border prose-td:border-gray-300 prose-td:px-3 prose-td:py-2',
           '[&_.is-editor-empty:first-child::before]:text-gray-400 [&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.is-editor-empty:first-child::before]:float-left [&_.is-editor-empty:first-child::before]:h-0 [&_.is-editor-empty:first-child::before]:pointer-events-none'
         ),
         style: { minHeight },

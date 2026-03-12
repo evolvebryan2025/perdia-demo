@@ -15,6 +15,10 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
+import { Table } from '@tiptap/extension-table'
+import { TableRow } from '@tiptap/extension-table-row'
+import { TableHeader } from '@tiptap/extension-table-header'
+import { TableCell } from '@tiptap/extension-table-cell'
 import {
   MessageSquarePlus,
   Brain,
@@ -442,6 +446,27 @@ export function CommentableArticle({
           class: 'max-w-full h-auto rounded',
         },
       }),
+      Table.configure({
+        resizable: false,
+        HTMLAttributes: {
+          class: 'border-collapse w-full my-4',
+        },
+      }),
+      TableRow.configure({
+        HTMLAttributes: {
+          class: 'border border-gray-300',
+        },
+      }),
+      TableHeader.configure({
+        HTMLAttributes: {
+          class: 'border border-gray-300 bg-gray-100 px-3 py-2 text-left font-semibold',
+        },
+      }),
+      TableCell.configure({
+        HTMLAttributes: {
+          class: 'border border-gray-300 px-3 py-2',
+        },
+      }),
     ],
     content: content || '',
     editable: false, // READ-ONLY MODE
@@ -471,6 +496,9 @@ export function CommentableArticle({
           'prose-a:text-blue-600 prose-a:underline',
           'prose-ul:list-disc prose-ol:list-decimal',
           'prose-blockquote:border-l-4 prose-blockquote:border-gray-300 prose-blockquote:pl-4 prose-blockquote:italic',
+          'prose-table:border-collapse prose-table:w-full prose-table:my-4',
+          'prose-th:border prose-th:border-gray-300 prose-th:bg-gray-100 prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:font-semibold',
+          'prose-td:border prose-td:border-gray-300 prose-td:px-3 prose-td:py-2',
         ),
       },
     },

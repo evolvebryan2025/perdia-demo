@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMemo, useCallback } from 'react'
 import { supabase } from '../services/supabaseClient'
 import { logUserInput, INPUT_TYPES } from './useUserInputLog'
 
@@ -35,32 +36,34 @@ export function useSettingValue(settingKey, defaultValue = '') {
 export function useSettingsMap() {
   const { data: settings = [], isLoading, error } = useSystemSettings()
 
-  const settingsMap = settings.reduce((acc, setting) => {
-    acc[setting.key] = setting.value
-    return acc
-  }, {})
+  const settingsMap = useMemo(() => {
+    return settings.reduce((acc, setting) => {
+      acc[setting.key] = setting.value
+      return acc
+    }, {})
+  }, [settings])
 
-  const getValue = (key, defaultValue = '') => {
+  const getValue = useCallback((key, defaultValue = '') => {
     return settingsMap[key] ?? defaultValue
-  }
+  }, [settingsMap])
 
-  const getBoolValue = (key, defaultValue = false) => {
+  const getBoolValue = useCallback((key, defaultValue = false) => {
     const value = settingsMap[key]
     if (value === undefined) return defaultValue
     return value === 'true'
-  }
+  }, [settingsMap])
 
-  const getIntValue = (key, defaultValue = 0) => {
+  const getIntValue = useCallback((key, defaultValue = 0) => {
     const value = settingsMap[key]
     if (value === undefined) return defaultValue
     return parseInt(value, 10) || defaultValue
-  }
+  }, [settingsMap])
 
-  const getFloatValue = (key, defaultValue = 0) => {
+  const getFloatValue = useCallback((key, defaultValue = 0) => {
     const value = settingsMap[key]
     if (value === undefined) return defaultValue
     return parseFloat(value) || defaultValue
-  }
+  }, [settingsMap])
 
   return {
     settings: settingsMap,

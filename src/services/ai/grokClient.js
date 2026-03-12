@@ -3,6 +3,8 @@
  * Uses xAI's Grok API for initial content generation
  */
 
+import { formatClientSchoolsForPrompt } from '../../config/clientSchools'
+
 // Anti-hallucination rules to inject into all generation prompts
 const ANTI_HALLUCINATION_RULES = `
 === CRITICAL: ANTI-HALLUCINATION RULES ===
@@ -258,12 +260,13 @@ class GrokClient {
       targetWordCount = 2000,
       includeOutline = true,
       costDataContext = null, // Cost data from ranking reports for RAG
+      cheapestSchoolsContext = null, // Cheapest client schools for affordability articles
       authorProfile = null, // Comprehensive author profile from useContributors
       authorName = null,
       contentRulesContext = null, // Dynamic content rules from database
     } = options
 
-    const prompt = this.buildDraftPrompt(idea, contentType, targetWordCount, costDataContext, authorProfile, authorName, contentRulesContext)
+    const prompt = this.buildDraftPrompt(idea, contentType, targetWordCount, costDataContext, authorProfile, authorName, contentRulesContext, cheapestSchoolsContext)
 
     // Build system prompt with optional author profile
     let systemPrompt = 'You are an expert content writer who creates high-quality, engaging articles. You write in a natural, conversational style with varied sentence structure.'
@@ -307,10 +310,16 @@ Follow the author's voice, style, and guidelines precisely. This will ensure con
    * Build prompt for article draft generation
    * IMPORTANT: Includes GetEducated-specific content rules (now configurable from database)
    */
-  buildDraftPrompt(idea, contentType, targetWordCount, costDataContext = null, authorProfile = null, authorName = null, contentRulesContext = null) {
+  buildDraftPrompt(idea, contentType, targetWordCount, costDataContext = null, authorProfile = null, authorName = null, contentRulesContext = null, cheapestSchoolsContext = null) {
     let costDataSection = ''
     if (costDataContext) {
       costDataSection = `\n\n${costDataContext}\n`
+    }
+
+    // Cheapest client schools section -- injected for affordability/cost articles
+    let cheapestSchoolsSection = ''
+    if (cheapestSchoolsContext) {
+      cheapestSchoolsSection = `\n\n${cheapestSchoolsContext}\n`
     }
 
     let authorSection = ''
@@ -327,7 +336,7 @@ Follow the author's voice, style, and guidelines precisely. This will ensure con
     return `Generate a comprehensive ${contentType} article based on this content idea for GetEducated.com, an online education resource.
 
 ${ANTI_HALLUCINATION_RULES}
-${costDataSection}${authorSection}
+${costDataSection}${cheapestSchoolsSection}${authorSection}
 
 CONTENT IDEA:
 Title: ${idea.title}
@@ -354,14 +363,20 @@ REQUIREMENTS:
    - Include BOTH in-state and out-of-state costs when available
    - NEVER invent or estimate costs - only use data from ranking reports
 
-=== COST DATA RULES (CRITICAL) ===
+=== COST DATA RULES (CRITICAL - READ CAREFULLY) ===
 1. When citing costs from ranking reports, use TOTAL PROGRAM COST, not per-credit cost
 2. If the data source shows per-credit cost, you MUST say "starting at $X per credit hour" — NEVER present per-credit costs as total program costs
-3. AVOID degree-completion rankings — use standard degree program rankings instead
-4. Always specify what the cost number represents: "total program cost" or "per credit hour"
-5. When listing affordable programs, cite the CHEAPEST client school options first
-6. If no client schools are available for a topic, use the cheapest non-client options
-7. NEVER present per-credit costs as if they are total program costs
+3. NEVER use per-credit-hour costs from degree-completion rankings as total program costs
+   - WRONG: "Program X costs $250" (when $250 is the per-credit price)
+   - RIGHT: "Program X costs $250 per credit hour, with total program costs varying by credits required"
+   - RIGHT: "Program X has a total program cost of $15,000 including all fees"
+4. Total program cost = per-credit cost x total credits required. If you do this math, show it.
+5. For degree-completion programs, credit requirements are typically 30-60 credits, NOT 120+
+   - A degree-completion student has ALREADY earned credits, so do not multiply per-credit cost by 120
+6. If you CANNOT determine the total program cost with certainty, write "costs vary; see GetEducated's ranking report for current pricing" instead of guessing
+7. Always specify what the cost number represents: "total program cost" or "per credit hour"
+8. When listing affordable programs, cite the CHEAPEST client school options first
+9. If no client schools are available for a topic, use the cheapest non-client options
 === END COST DATA RULES ===
 
 2. SCHOOL/DEGREE REFERENCES:
@@ -377,20 +392,37 @@ REQUIREMENTS:
    - Accreditation info should reference official accreditation bodies (AACSB, ABET, etc.)
    - NEVER reference competitor sites (onlineu.com, usnews.com, affordablecollegesonline.com)
 
-=== EXTERNAL LINKS (MANDATORY) ===
+=== EXTERNAL LINKS (MANDATORY - MOST COMMON FAILURE POINT) ===
 You MUST embed at least 2 external hyperlinks in the article as HTML <a> tags.
+This is the #1 quality issue in generated articles. Do NOT skip this.
 
-Approved external sources ONLY:
-- Bureau of Labor Statistics: Use actual BLS Occupational Outlook pages, e.g., <a href="https://www.bls.gov/ooh/healthcare/registered-nurses.htm">Bureau of Labor Statistics</a>
+APPROVED EXTERNAL SOURCES (with example URLs):
+- Bureau of Labor Statistics (BLS):
+  - General: <a href="https://www.bls.gov/ooh/">BLS Occupational Outlook Handbook</a>
+  - Nurses: <a href="https://www.bls.gov/ooh/healthcare/registered-nurses.htm">BLS</a>
+  - Teachers: <a href="https://www.bls.gov/ooh/education-training-and-library/high-school-teachers.htm">BLS</a>
+  - Social Workers: <a href="https://www.bls.gov/ooh/community-and-social-service/social-workers.htm">BLS</a>
+  - Business: <a href="https://www.bls.gov/ooh/management/">BLS</a>
+  - Computer Science: <a href="https://www.bls.gov/ooh/computer-and-information-technology/">BLS</a>
 - NCES: <a href="https://nces.ed.gov/">National Center for Education Statistics</a>
-- Department of Education (.gov sites)
-- Official accreditation bodies
+- Department of Education: <a href="https://www.ed.gov/">U.S. Department of Education</a>
+- Official accreditation bodies (aacsb.edu, abet.org, caep.org, ccne-accreditation.org)
 
-When citing salary data, job outlook, or career statistics, you MUST embed the source as a clickable link:
-CORRECT: <p>According to the <a href="https://www.bls.gov/ooh/healthcare/registered-nurses.htm">Bureau of Labor Statistics</a>, registered nurses earn a median salary of $81,220.</p>
-WRONG: <p>According to the Bureau of Labor Statistics, registered nurses earn a median salary of $81,220.</p>
+RULES FOR EXTERNAL LINKS:
+1. When mentioning Bureau of Labor Statistics, ALWAYS hyperlink to the relevant BLS.gov OOH page
+2. When citing salary data, employment statistics, or job outlook data, ALWAYS include a hyperlink to the specific BLS Occupational Outlook Handbook page for that career
+3. When mentioning NCES or education statistics, ALWAYS embed a hyperlink to nces.ed.gov
+4. NEVER mention BLS, NCES, or Department of Education as PLAIN TEXT. They MUST be clickable links.
+5. Every article MUST contain at least 1 external link to an authoritative source
 
-NEVER mention BLS, NCES, or any external source without embedding a hyperlink to it.
+CORRECT EXAMPLES:
+<p>According to the <a href="https://www.bls.gov/ooh/healthcare/registered-nurses.htm">Bureau of Labor Statistics</a>, registered nurses earn a median salary of $81,220.</p>
+<p>Data from the <a href="https://nces.ed.gov/">National Center for Education Statistics</a> shows enrollment in online programs continues to grow.</p>
+
+WRONG EXAMPLES (NEVER DO THIS):
+<p>According to the Bureau of Labor Statistics, registered nurses earn a median salary of $81,220.</p>
+<p>NCES data shows enrollment growing.</p>
+^^^ These mention sources without hyperlinks. This is ALWAYS wrong.
 === END EXTERNAL LINKS ===
 
 4. CONTENT FOCUS:
@@ -414,6 +446,20 @@ NEVER mention BLS, NCES, or any external source without embedding a hyperlink to
    - Links to ranking reports, schools, and degrees will be added via shortcodes AFTER generation
 
 === END GETEDUCATED RULES ===
+
+=== CLIENT SCHOOL LIST (MUST USE) ===
+The following schools are GetEducated partner/client schools. You MUST actively reference these schools in the article content when they are relevant to the topic.
+
+MANDATORY RULES FOR CLIENT SCHOOLS:
+1. When discussing schools, universities, or programs relevant to this article's topic, ALWAYS include at least 2-3 client schools from this list as specific examples
+2. Link to their GetEducated page URL (e.g., https://www.geteducated.com/online-schools/school-name/), NEVER to .edu sites
+3. Weave client school references naturally into the content - mention them as examples of schools offering relevant programs, as affordable options, or as noteworthy institutions in the field
+4. If the article discusses a specific degree type or subject area, prioritize client schools that are known for that area
+5. Do NOT just list schools in a block - integrate them into paragraphs where they add value to the reader
+6. Each client school mention MUST include a hyperlink to its GetEducated page
+
+${formatClientSchoolsForPrompt()}
+=== END CLIENT SCHOOL LIST ===
 ${dynamicRulesSection}
 STRUCTURE:
 ${this.getStructureForContentType(contentType)}
@@ -433,7 +479,13 @@ BANNED PHRASES AND PATTERNS (never use these):
 - "Robust"
 - "Seamless"
 - "Navigate the landscape"
-- VARY LIST LENGTH: Do NOT always list exactly 3 items ("X, Y, and Z"). This is a known AI writing pattern. Mix it up — sometimes list 2 items, sometimes 4 or 5. Avoid the "rule of three" pattern.
+- CRITICAL TRIPLICATE RULE: Do NOT use the "X, Y, and Z" pattern more than 2 times in the ENTIRE article. This is a DEAD GIVEAWAY of AI authorship and articles with 10+ triplicates are rejected.
+- Instead of "X, Y, and Z", use these alternatives:
+  - Pairs: "X and Y" (drop the least important item)
+  - Longer lists: "X, Y, Z, and W"
+  - Single focus: "Most notably X. Y is also worth considering."
+  - Rephrased: "Several factors matter, including X."
+- After writing the full article, scan every sentence for the "A, B, and C" pattern and rewrite at least 80% of them using the alternatives above.
 
 === CRITICAL HTML FORMATTING RULES (MANDATORY) ===
 

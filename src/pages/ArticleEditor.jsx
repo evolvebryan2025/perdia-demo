@@ -16,6 +16,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Send,
   MoreVertical,
   Sparkles,
@@ -30,7 +32,9 @@ import {
   Edit3,
   ThumbsUp,
   ThumbsDown,
-  RefreshCcw
+  RefreshCcw,
+  AlertTriangle,
+  X
 } from 'lucide-react'
 // TipTap editor - React 19 compatible rich text editor
 import { RichTextEditor, getWordCount } from '@/components/ui/rich-text-editor'
@@ -129,6 +133,8 @@ function ArticleEditorContent() {
   const [isRevising, setIsRevising] = useState(false)
   const [feedbackComment, setFeedbackComment] = useState('')
   const [feedbackComments, setFeedbackComments] = useState([]) // Array of comments for AI revision
+  const [showQualityBar, setShowQualityBar] = useState(true) // Inline quality summary bar visibility
+  const [qualityBarExpanded, setQualityBarExpanded] = useState(false) // Expand to show all failing checks
 
   // Compliance update state (per Dec 22, 2025 meeting - "Update" button)
   const [isUpdating, setIsUpdating] = useState(false)
@@ -157,6 +163,30 @@ function ArticleEditorContent() {
 
   // Calculate word count using TipTap helper
   const wordCount = useMemo(() => getWordCount(content), [content])
+
+  // Derive failing quality checks for the inline summary bar
+  const failingChecks = useMemo(() => {
+    if (!qualityData?.checks) return []
+    return Object.entries(qualityData.checks)
+      .filter(([, check]) => !check.passed)
+      .map(([key, check]) => ({
+        key,
+        label: check.label,
+        value: check.value,
+        issue: check.issue,
+        critical: check.critical,
+        severity: check.severity || (check.critical ? 'critical' : 'minor'),
+      }))
+  }, [qualityData])
+
+  // Re-show the quality bar when the set of failing check keys changes
+  // (e.g., user fixes some issues or new issues appear after editing)
+  const failingCheckKeys = failingChecks.map(c => c.key).join(',')
+  useEffect(() => {
+    if (failingChecks.length > 0) {
+      setShowQualityBar(true)
+    }
+  }, [failingCheckKeys]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save handler
   const handleSave = async () => {
@@ -633,7 +663,7 @@ function ArticleEditorContent() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-full min-h-[400px]">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
       </div>
     )
@@ -641,7 +671,7 @@ function ArticleEditorContent() {
 
   if (!article) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen">
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
         <FileText className="w-12 h-12 text-gray-300 mb-4" />
         <p className="text-gray-500">Article not found</p>
         <Button onClick={() => navigate('/')} className="mt-4">
@@ -655,7 +685,7 @@ function ArticleEditorContent() {
   const currentStatus = STATUS_OPTIONS.find(s => s.value === article.status)
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="flex flex-col bg-gray-50 min-h-[calc(100vh-64px)]">
       {/* Header */}
       <div className="border-b border-gray-200 bg-white px-4 py-3 flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -905,8 +935,67 @@ function ArticleEditorContent() {
         </div>
       )}
 
+      {/* Inline Quality Summary Bar - shows failing checks above editor */}
+      {showQualityBar && qualityData && failingChecks.length > 0 && (
+        <div className="border-b border-gray-200 bg-white px-4 py-2 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            {/* Summary pills - always visible */}
+            <div className="flex items-center gap-1.5 flex-1 flex-wrap">
+              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+              <span className="text-xs font-medium text-gray-600 mr-1">
+                {failingChecks.length} issue{failingChecks.length !== 1 ? 's' : ''}:
+              </span>
+              {(qualityBarExpanded ? failingChecks : failingChecks.slice(0, 4)).map((check) => (
+                <span
+                  key={check.key}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                    check.critical
+                      ? 'bg-red-100 text-red-700'
+                      : check.severity === 'warning'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-yellow-100 text-yellow-700'
+                  }`}
+                  title={check.issue || check.label}
+                >
+                  {check.issue || check.value}
+                </span>
+              ))}
+              {!qualityBarExpanded && failingChecks.length > 4 && (
+                <span className="text-xs text-gray-400">
+                  +{failingChecks.length - 4} more
+                </span>
+              )}
+            </div>
+
+            {/* Expand/Collapse toggle */}
+            {failingChecks.length > 4 && (
+              <button
+                onClick={() => setQualityBarExpanded(!qualityBarExpanded)}
+                className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                title={qualityBarExpanded ? 'Show fewer' : 'Show all'}
+              >
+                {qualityBarExpanded ? (
+                  <ChevronUp className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+
+            {/* Dismiss button */}
+            <button
+              onClick={() => setShowQualityBar(false)}
+              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+              title="Dismiss quality bar"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
-      <div className="flex-1 overflow-hidden flex">
+      <div className="flex-1 overflow-hidden flex relative">
         {/* Editor Area */}
         <div className={`flex-1 overflow-hidden flex flex-col ${showSidebar ? 'mr-80' : ''}`}>
           {commentMode ? (
@@ -1017,7 +1106,7 @@ function ArticleEditorContent() {
 
         {/* Sidebar */}
         {showSidebar && (
-          <div className="w-80 border-l border-gray-200 bg-white fixed right-0 top-[57px] bottom-0 flex flex-col overflow-hidden">
+          <div className="w-80 border-l border-gray-200 bg-white absolute right-0 top-0 bottom-0 flex flex-col overflow-hidden">
             <Tabs value={sidebarTab} onValueChange={setSidebarTab} className="flex-1 flex flex-col min-h-0">
               <TabsList className="w-full border-b rounded-none h-auto p-1 bg-gray-50 flex-shrink-0 flex-wrap">
                 <TabsTrigger value="quality" className="flex-1 text-xs py-2">Quality</TabsTrigger>

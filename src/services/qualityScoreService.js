@@ -95,6 +95,104 @@ export function clearQualitySettingsCache() {
 }
 
 /**
+ * Validate cost and salary data in article content.
+ * Flags suspicious values that likely indicate data entry errors:
+ * - Total program cost under $3,000 (likely per-credit, not total)
+ * - Total program cost over $200,000 (unusually high)
+ * - Salary under $20,000 or over $500,000 (outside common BLS ranges)
+ *
+ * These are WARNING severity — they don't block publishing.
+ *
+ * @param {string} plainText - Plain text content (HTML stripped)
+ * @returns {Object} - Validation results with flagged values
+ */
+function validateCostAndSalaryData(plainText) {
+  const result = {
+    hasSuspiciousCost: false,
+    hasSuspiciousSalary: false,
+    suspiciousCosts: [],
+    suspiciousSalaries: [],
+    costMentions: 0,
+    salaryMentions: 0,
+  }
+
+  if (!plainText) return result
+
+  // Match dollar amounts: $1,234 or $1234 or $1,234.56 or $1234.56
+  // Also handles "$1,234 per year", "$1,234/year", etc.
+  const dollarPattern = /\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\b/g
+  let match
+
+  // Collect all dollar amounts with their surrounding context
+  const amounts = []
+  while ((match = dollarPattern.exec(plainText)) !== null) {
+    const rawValue = match[1].replace(/,/g, '')
+    const numValue = parseFloat(rawValue)
+    // Get surrounding context (80 chars before and after)
+    const start = Math.max(0, match.index - 80)
+    const end = Math.min(plainText.length, match.index + match[0].length + 80)
+    const context = plainText.substring(start, end).toLowerCase()
+    amounts.push({ numValue, display: match[0], context })
+  }
+
+  // Classify amounts by context keywords
+  const costKeywords = ['cost', 'tuition', 'price', 'program', 'degree', 'total', 'per credit', 'per-credit', 'credit hour', 'fee', 'afford', 'expensive', 'cheap', 'budget']
+  const salaryKeywords = ['salary', 'salaries', 'earn', 'earning', 'income', 'wage', 'pay', 'compensation', 'median', 'annual', 'per year', 'per annum', 'yearly', 'bls']
+  const perCreditKeywords = ['per credit', 'per-credit', 'credit hour', '/credit', 'each credit']
+
+  for (const amt of amounts) {
+    const isCostContext = costKeywords.some(kw => amt.context.includes(kw))
+    const isSalaryContext = salaryKeywords.some(kw => amt.context.includes(kw))
+    const isPerCredit = perCreditKeywords.some(kw => amt.context.includes(kw))
+
+    // Skip per-credit costs — those are expected to be small
+    if (isPerCredit) continue
+
+    if (isCostContext && !isSalaryContext) {
+      result.costMentions++
+      // Flag total program cost under $3,000 (likely per-credit being used as total)
+      if (amt.numValue < 3000) {
+        result.hasSuspiciousCost = true
+        result.suspiciousCosts.push({
+          value: amt.numValue,
+          display: `${amt.display} (under $3,000 — likely per-credit, not total)`,
+        })
+      }
+      // Flag total program cost over $200,000
+      if (amt.numValue > 200000) {
+        result.hasSuspiciousCost = true
+        result.suspiciousCosts.push({
+          value: amt.numValue,
+          display: `${amt.display} (over $200,000 — unusually high)`,
+        })
+      }
+    }
+
+    if (isSalaryContext && !isCostContext) {
+      result.salaryMentions++
+      // Flag salary under $20,000 (below typical BLS minimums)
+      if (amt.numValue < 20000) {
+        result.hasSuspiciousSalary = true
+        result.suspiciousSalaries.push({
+          value: amt.numValue,
+          display: `${amt.display} (under $20,000 — below typical BLS range)`,
+        })
+      }
+      // Flag salary over $500,000 (above typical BLS maximums)
+      if (amt.numValue > 500000) {
+        result.hasSuspiciousSalary = true
+        result.suspiciousSalaries.push({
+          value: amt.numValue,
+          display: `${amt.display} (over $500,000 — above typical BLS range)`,
+        })
+      }
+    }
+  }
+
+  return result
+}
+
+/**
  * Calculate quality metrics for an article
  *
  * SIMPLIFIED v2: Only checks what GetEducated actually cares about
@@ -142,9 +240,14 @@ export function calculateQualityScore(content, article = {}, thresholds = DEFAUL
   // Author assignment check
   const hasAuthor = !!(article?.contributor_id || article?.article_contributors)
 
-  // Build checks object - SIMPLIFIED to 6 checks
+  // Cost/Salary data validation
+  // Extract dollar amounts from content to flag suspicious values
+  const costSalaryValidation = validateCostAndSalaryData(plainText)
+
+  // Build checks object - SIMPLIFIED to 6 checks + cost/salary warnings
   const checks = {
     wordCount: {
+      type: wordCount < t.minWordCount ? 'word_count_low' : 'word_count_high',
       passed: wordCount >= t.minWordCount && wordCount <= t.maxWordCount,
       critical: false,
       enabled: true,
@@ -157,6 +260,7 @@ export function calculateQualityScore(content, article = {}, thresholds = DEFAUL
           : null
     },
     internalLinks: {
+      type: 'missing_internal_links',
       passed: internalLinks >= t.minInternalLinks,
       critical: true,
       enabled: true,
@@ -167,6 +271,7 @@ export function calculateQualityScore(content, article = {}, thresholds = DEFAUL
         : null
     },
     externalLinks: {
+      type: 'missing_external_links',
       passed: externalLinks >= t.minExternalLinks,
       critical: false,
       enabled: true,
@@ -177,6 +282,7 @@ export function calculateQualityScore(content, article = {}, thresholds = DEFAUL
         : null
     },
     headings: {
+      type: 'weak_headings',
       passed: !t.requireHeadings || totalHeadings >= t.minHeadingCount,
       critical: false,
       enabled: t.requireHeadings,
@@ -187,6 +293,7 @@ export function calculateQualityScore(content, article = {}, thresholds = DEFAUL
         : null
     },
     bannedLinks: {
+      type: 'bannedLinks',
       passed: !hasBannedLinks,
       critical: true,
       enabled: true,
@@ -197,6 +304,7 @@ export function calculateQualityScore(content, article = {}, thresholds = DEFAUL
         : null
     },
     authorAssigned: {
+      type: 'missing_author',
       passed: hasAuthor,
       critical: false,
       enabled: true,
@@ -205,6 +313,7 @@ export function calculateQualityScore(content, article = {}, thresholds = DEFAUL
       issue: !hasAuthor ? 'Assign an author/contributor' : null
     },
     triplicates: {
+      type: 'triplicates',
       passed: triplicateResult.count < 10,
       critical: false,
       enabled: true,
@@ -212,6 +321,36 @@ export function calculateQualityScore(content, article = {}, thresholds = DEFAUL
       value: `${triplicateResult.count} found`,
       issue: triplicateResult.count >= 10
         ? `Reduce triplicate patterns (${triplicateResult.count} found). Vary sentence structure instead of always listing 3 items.`
+        : null
+    },
+    suspiciousCost: {
+      passed: !costSalaryValidation.hasSuspiciousCost,
+      critical: false,
+      enabled: true,
+      severity: 'warning',
+      label: 'Program costs in valid range ($3,000-$200,000)',
+      value: costSalaryValidation.hasSuspiciousCost
+        ? `${costSalaryValidation.suspiciousCosts.length} suspicious cost(s) found`
+        : costSalaryValidation.costMentions > 0
+          ? `${costSalaryValidation.costMentions} cost figure(s) look valid`
+          : 'No cost data detected',
+      issue: costSalaryValidation.hasSuspiciousCost
+        ? `Suspicious program cost(s): ${costSalaryValidation.suspiciousCosts.map(c => c.display).join('; ')}. Verify these are total program costs, not per-credit costs.`
+        : null
+    },
+    suspiciousSalary: {
+      passed: !costSalaryValidation.hasSuspiciousSalary,
+      critical: false,
+      enabled: true,
+      severity: 'warning',
+      label: 'Salary figures in BLS range ($20,000-$500,000)',
+      value: costSalaryValidation.hasSuspiciousSalary
+        ? `${costSalaryValidation.suspiciousSalaries.length} suspicious salary(ies) found`
+        : costSalaryValidation.salaryMentions > 0
+          ? `${costSalaryValidation.salaryMentions} salary figure(s) look valid`
+          : 'No salary data detected',
+      issue: costSalaryValidation.hasSuspiciousSalary
+        ? `Suspicious salary figure(s): ${costSalaryValidation.suspiciousSalaries.map(s => s.display).join('; ')}. Verify against BLS data.`
         : null
     },
   }
@@ -238,7 +377,7 @@ export function calculateQualityScore(content, article = {}, thresholds = DEFAUL
     .map(c => ({
       description: c.issue,
       critical: c.critical,
-      severity: c.critical ? 'major' : 'minor'
+      severity: c.severity === 'warning' ? 'warning' : (c.critical ? 'major' : 'minor')
     }))
 
   return {

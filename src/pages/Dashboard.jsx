@@ -24,6 +24,7 @@ import {
   useSensor,
   useSensors,
   DragOverlay,
+  useDroppable,
 } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { useSortable } from '@dnd-kit/sortable'
@@ -183,13 +184,27 @@ function Dashboard() {
     }
 
     const articleId = active.id
-    const newStatus = over.id
+    const validStatuses = STATUSES.map(s => s.value)
 
-    // Find the article being dragged
+    // Determine which column was dropped on
+    let newStatus
+    if (validStatuses.includes(over.id)) {
+      // Dropped directly on a column
+      newStatus = over.id
+    } else if (over.data?.current?.type === 'article') {
+      // Dropped on another article — resolve to that article's column
+      const targetArticle = articles.find(a => a.id === over.id)
+      newStatus = targetArticle?.status
+    }
+
+    if (!newStatus) {
+      setActiveId(null)
+      return
+    }
+
     const article = articles.find(a => a.id === articleId)
 
     if (article && article.status !== newStatus) {
-      // Update status in database
       handleStatusChange(article, newStatus)
     }
 
@@ -1005,18 +1020,17 @@ function Dashboard() {
 
 // Droppable Column Component
 function DroppableColumn({ id, children }) {
-  const { setNodeRef, isOver } = useSortable({
+  const { setNodeRef, isOver } = useDroppable({
     id,
     data: {
       type: 'column',
-      accepts: ['article'],
     },
   })
 
   return (
     <div
       ref={setNodeRef}
-      className={`transition-colors ${isOver ? 'ring-2 ring-blue-400 ring-offset-2 rounded-lg' : ''}`}
+      className={`transition-colors min-h-[100px] ${isOver ? 'ring-2 ring-blue-400 ring-offset-2 rounded-lg bg-blue-50/50' : ''}`}
     >
       {children}
     </div>
@@ -1032,11 +1046,18 @@ function SortableArticleCard({ article, onClick, onStatusChange, onApprove, inde
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: article.id })
+  } = useSortable({
+    id: article.id,
+    data: {
+      type: 'article',
+      article,
+    },
+  })
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: isDragging ? undefined : transition,
+    zIndex: isDragging ? 50 : undefined,
   }
 
   const isReadyToPublish = article.status === 'ready_to_publish'
@@ -1049,9 +1070,11 @@ function SortableArticleCard({ article, onClick, onStatusChange, onApprove, inde
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: isDragging ? 0.5 : 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.2, delay: index * 0.02 }}
-      whileHover={{ scale: isDragging ? 1 : 1.02 }}
-      className={`bg-white p-4 rounded-lg border hover:shadow-md transition-shadow cursor-pointer group ${
+      transition={isDragging ? { duration: 0 } : { duration: 0.2, delay: index * 0.02 }}
+      whileHover={isDragging ? undefined : { scale: 1.02 }}
+      className={`bg-white p-4 rounded-lg border hover:shadow-md transition-shadow group ${
+        isDragging ? 'cursor-grabbing shadow-lg ring-2 ring-blue-300' : 'cursor-pointer'
+      } ${
         isApproved ? 'border-green-300 bg-green-50' : 'border-gray-200'
       }`}
     >

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../services/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
+import { calculateQualityScore, calculateQualityScoreAsync, getQualityThresholds } from '../services/qualityScoreService'
 
 /**
  * Fetch all articles (shared workspace - all users see all articles)
@@ -32,7 +33,21 @@ export function useArticles(filters = {}) {
       const { data, error } = await query
 
       if (error) throw error
-      return data
+
+      // Recalculate quality scores to ensure consistency with editor sidebar
+      const thresholds = await getQualityThresholds()
+      const articles = (data || []).map(article => {
+        if (article.content) {
+          const result = calculateQualityScore(article.content, article, thresholds)
+          if (result.score !== article.quality_score) {
+            // Sync stale DB score in background
+            supabase.from('articles').update({ quality_score: result.score }).eq('id', article.id)
+          }
+          return { ...article, quality_score: result.score }
+        }
+        return article
+      })
+      return articles
     },
     enabled: !!user,
     refetchOnMount: 'always', // Always refetch when navigating back to ensure fresh data
@@ -89,12 +104,36 @@ export function useCreateArticle() {
 
 /**
  * Update an existing article
+ *
+ * QUALITY SCORE SYNC: When content is included in the updates, the quality
+ * score is automatically recalculated and written to the DB. This ensures
+ * the Dashboard tile score always matches the editor score.
  */
 export function useUpdateArticle() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async ({ articleId, updates }) => {
+      // If content is being updated, always recalculate quality score
+      // to keep the DB (Dashboard) in sync with the live editor score.
+      if (updates.content) {
+        try {
+          const qualityResult = await calculateQualityScoreAsync(updates.content, {
+            contributor_id: updates.contributor_id,
+            article_contributors: updates.article_contributors,
+          })
+          updates.quality_score = qualityResult.score
+          updates.quality_issues = qualityResult.issues
+          // Also sync word count if not already set
+          if (!updates.word_count) {
+            updates.word_count = qualityResult.word_count
+          }
+        } catch (e) {
+          console.warn('[useUpdateArticle] Quality score recalculation failed, saving without update:', e)
+          // Don't block the save if quality calc fails
+        }
+      }
+
       const { data, error } = await supabase
         .from('articles')
         .update(updates)

@@ -1,4 +1,4 @@
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../contexts/AuthContext'
 import HelpFeedbackButton from '../feedback/HelpFeedbackButton'
@@ -25,16 +25,13 @@ import {
   History,
   MessageSquare,
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 // Import git info (generated at build time)
-// Falls back to empty object if file doesn't exist yet
-let gitInfo = { recentCommits: [], version: 'dev', buildDate: '' }
-try {
-  gitInfo = await import('../../data/git-info.json')
-} catch (e) {
-  console.warn('git-info.json not found - run npm run generate-git-info')
-}
+// Uses a synchronous import to avoid top-level await which can cause
+// the module to load asynchronously and break React Router navigation
+import gitInfoData from '../../data/git-info.json'
+const gitInfo = gitInfoData || { recentCommits: [], version: 'dev', buildDate: '' }
 
 // Get icon based on commit type
 function getCommitIcon(type) {
@@ -142,6 +139,7 @@ function SystemStatusBanner() {
 function MainLayout() {
   const { user, signOut } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -159,6 +157,18 @@ function MainLayout() {
     { name: 'Dev Feedback', href: '/dev-feedback', icon: MessageSquare },
   ]
 
+  // Explicit navigation handler — bypasses <Link> which can fail
+  // to trigger Outlet re-renders in React Router v7 + React 19
+  const handleNavigation = useCallback((e, href) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // Only navigate if we're not already on this path
+    if (location.pathname !== href) {
+      navigate(href)
+      window.scrollTo(0, 0)
+    }
+  }, [navigate, location.pathname])
+
   const handleSignOut = async () => {
     try {
       await signOut()
@@ -169,42 +179,42 @@ function MainLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <motion.div
-        initial={{ x: -280 }}
-        animate={{ x: 0 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+      {/* Sidebar - uses div instead of motion.div to avoid transform creating
+          a containing block that breaks fixed positioning of child elements
+          and interferes with pointer events during animation */}
+      <div
         className="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 shadow-sm"
       >
         <div className="flex flex-col h-full">
-          {/* Logo */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="flex items-center h-16 px-6 border-b border-gray-200"
+          {/* Logo — click navigates to Dashboard */}
+          <a
+            href="/"
+            onClick={(e) => handleNavigation(e, '/')}
+            className="flex items-center h-16 px-6 border-b border-gray-200 cursor-pointer"
           >
-            <motion.div
-              whileHover={{ rotate: 10 }}
-              transition={{ type: 'spring', stiffness: 400 }}
-            >
+            <div>
               <FileText className="w-8 h-8 text-blue-600" />
-            </motion.div>
+            </div>
             <span className="ml-2 text-xl font-bold text-gray-900">Perdia</span>
-          </motion.div>
+          </a>
 
-          {/* Navigation */}
+          {/* Navigation — uses explicit navigate() instead of <Link>
+              to guarantee route transitions work from any page */}
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
-              const isActive = location.pathname === item.href
+              // Use startsWith for nested routes, exact match for root
+              const isActive = item.href === '/'
+                ? location.pathname === '/'
+                : location.pathname.startsWith(item.href)
               const Icon = item.icon
 
               return (
-                <Link
+                <a
                   key={item.name}
-                  to={item.href}
+                  href={item.href}
+                  onClick={(e) => handleNavigation(e, item.href)}
                   className={`
-                    flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200
+                    flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 relative cursor-pointer
                     ${
                       isActive
                         ? 'text-blue-700 bg-blue-50'
@@ -214,27 +224,23 @@ function MainLayout() {
                 >
                   <Icon className="w-5 h-5 mr-3" />
                   {item.name}
-                </Link>
+                </a>
               )
             })}
           </nav>
 
           {/* User Section */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
+          <div
             className="p-4 border-t border-gray-200"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center min-w-0">
                 <div className="flex-shrink-0">
-                  <motion.div
-                    whileHover={{ scale: 1.1 }}
+                  <div
                     className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center text-white font-medium shadow-sm"
                   >
                     {user?.email?.[0].toUpperCase()}
-                  </motion.div>
+                  </div>
                 </div>
                 <div className="ml-3 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">
@@ -242,28 +248,27 @@ function MainLayout() {
                   </p>
                 </div>
               </div>
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
+              <button
                 onClick={handleSignOut}
                 className="flex-shrink-0 p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
                 title="Sign out"
               >
                 <LogOut className="w-5 h-5" />
-              </motion.button>
+              </button>
             </div>
-          </motion.div>
+          </div>
         </div>
-      </motion.div>
+      </div>
 
-      {/* Main Content */}
+      {/* Main Content — key moved from <main> to <Outlet>. Putting
+          key on <main> forced the entire Outlet to remount, causing
+          route context desync in React Router v7 + React 19. Keying
+          the Outlet directly forces child component remount while
+          preserving Outlet's own route context subscription. */}
       <div className="pl-64">
         <SystemStatusBanner />
         <main className="min-h-screen">
-          {/* Key on top-level route segment forces remount when switching pages
-              (editor→dashboard) but NOT when changing params within the same page
-              (editor/1→editor/2). This fixes the "stuck on editor" navigation bug. */}
-          <Outlet key={location.pathname.split('/')[1] || 'index'} />
+          <Outlet key={location.pathname} />
         </main>
       </div>
 

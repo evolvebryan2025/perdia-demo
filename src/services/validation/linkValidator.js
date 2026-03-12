@@ -45,6 +45,9 @@ export const BLOCKED_COMPETITORS = [
   'collegerank.net',
   'university.com',
   'worldwidelearn.com',
+  // Competitor URLs added per Item 10 blocklist expansion
+  'collegechoice.net',
+  'affordablecollegesonline.org',
 ]
 
 // Allowed external domains (whitelist approach for external links)
@@ -82,6 +85,15 @@ export const ALLOWED_EXTERNAL_DOMAINS = [
 const GETEDUCATED_DOMAINS = [
   'geteducated.com',
   'www.geteducated.com',
+]
+
+// Blocked GetEducated URLs — bachelor-completion programs that must NOT be used for cost references.
+// These ranking report pages contain outdated or inappropriate data for article cost citations.
+export const BLOCKED_GETEDUCATED_URLS = [
+  'geteducated.com/online-college-ratings-and-rankings/dental-hygiene-online-bachelor-completion-programs',
+  'geteducated.com/online-college-ratings-and-rankings/bachelors-radiology-online',
+  'geteducated.com/online-college-ratings-and-rankings/rrt-to-bsrt-online',
+  'geteducated.com/online-college-ratings-and-rankings/best-buy-lists/best-buy-online-bachelors-nursing',
 ]
 
 /**
@@ -136,6 +148,21 @@ export function validateLink(url) {
   // Check if it's a GetEducated internal link
   if (GETEDUCATED_DOMAINS.some(d => domain === d || domain.endsWith('.' + d))) {
     result.type = 'internal'
+
+    // Check against blocked GetEducated URLs (bachelor-completion programs not allowed for cost references).
+    // Normalize the URL by stripping protocol, www prefix, and trailing slash for reliable matching.
+    const normalizedUrl = url.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '')
+    for (const blockedPath of BLOCKED_GETEDUCATED_URLS) {
+      if (normalizedUrl === blockedPath || normalizedUrl === blockedPath + '/') {
+        result.isValid = false
+        result.issues.push(
+          `Blocked GetEducated URL: this bachelor-completion ranking report must not be used for cost references. URL: ${url}`
+        )
+        result.severity = 'blocking'
+        return result
+      }
+    }
+
     return result
   }
 
@@ -473,5 +500,6 @@ export default {
   checkLinkStatus,
   validateLinksAreLive,
   BLOCKED_COMPETITORS,
+  BLOCKED_GETEDUCATED_URLS,
   ALLOWED_EXTERNAL_DOMAINS,
 }

@@ -41,6 +41,7 @@ class GrokClient {
       contentType = 'guide',
       targetWordCount = 2000,
       costDataContext = null,
+      cheapestSchoolsContext = null, // Cheapest client schools for affordability articles
       authorProfile = null,
       authorName = null,
       contentRulesContext = null,
@@ -53,6 +54,7 @@ class GrokClient {
         contentType,
         targetWordCount,
         costDataContext,
+        cheapestSchoolsContext,
         authorProfile,
         authorName,
         contentRulesContext,

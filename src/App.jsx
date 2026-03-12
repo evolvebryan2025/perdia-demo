@@ -9,6 +9,7 @@ import { queryClient } from './lib/queryClient'
 
 // Pages
 import Login from './pages/Login'
+import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import ArticleEditor from './pages/ArticleEditor'
 import ContentIdeas from './pages/ContentIdeas'
@@ -63,6 +64,7 @@ function App() {
                 <Routes>
                   {/* Public Routes */}
                   <Route path="/login" element={<Login />} />
+                  <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/secret/josh" element={<SecretJosh />} />
 
                   {/* Batch Progress - Standalone page for new tab/window */}

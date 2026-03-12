@@ -57,9 +57,9 @@ export default function QualityChecklist({ article, content, onQualityChange, on
   const handleAutoFix = async () => {
     if (!onAutoFix) return
 
-    const issues = Object.values(checks)
-      .filter(c => !c.passed && c.issue)
-      .map(c => ({ description: c.issue, critical: c.critical }))
+    const issues = Object.entries(checks)
+      .filter(([, c]) => !c.passed && c.issue)
+      .map(([key, c]) => ({ type: c.type || key, description: c.issue, critical: c.critical }))
 
     if (issues.length === 0) return
 
@@ -101,37 +101,47 @@ export default function QualityChecklist({ article, content, onQualityChange, on
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {Object.entries(checks).map(([key, check]) => (
-          <div
-            key={key}
-            className={`flex items-start justify-between gap-3 p-3 rounded-lg ${
-              check.passed
-                ? 'bg-green-50'
-                : check.critical
-                  ? 'bg-red-50'
-                  : 'bg-yellow-50'
-            }`}
-          >
-            <div className="flex items-start gap-2 flex-1">
-              {check.passed ? (
-                <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-              ) : check.critical ? (
-                <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              ) : (
-                <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-              )}
-              <div>
-                <p className="font-medium text-sm text-gray-900">{check.label}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{check.value}</p>
-                {check.critical && !check.passed && (
-                  <p className="text-xs text-red-600 mt-1 font-medium">
-                    Critical - blocks publishing
-                  </p>
+        {Object.entries(checks).map(([key, check]) => {
+          const isWarning = check.severity === 'warning'
+          return (
+            <div
+              key={key}
+              className={`flex items-start justify-between gap-3 p-3 rounded-lg ${
+                check.passed
+                  ? 'bg-green-50'
+                  : check.critical
+                    ? 'bg-red-50'
+                    : isWarning
+                      ? 'bg-amber-50'
+                      : 'bg-yellow-50'
+              }`}
+            >
+              <div className="flex items-start gap-2 flex-1">
+                {check.passed ? (
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                ) : check.critical ? (
+                  <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${isWarning ? 'text-amber-600' : 'text-yellow-600'}`} />
                 )}
+                <div>
+                  <p className="font-medium text-sm text-gray-900">{check.label}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{check.value}</p>
+                  {check.critical && !check.passed && (
+                    <p className="text-xs text-red-600 mt-1 font-medium">
+                      Critical - blocks publishing
+                    </p>
+                  )}
+                  {isWarning && !check.passed && (
+                    <p className="text-xs text-amber-700 mt-1 font-medium">
+                      Warning - verify data accuracy
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
 
         {!canPublish && issues.length > 0 && (
           <div className="mt-4 p-3 bg-red-50 rounded-lg border border-red-200">

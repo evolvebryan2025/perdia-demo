@@ -29,6 +29,9 @@ export function handleSupabaseError(error) {
  */
 export async function getCurrentUser() {
   const { data: { user }, error } = await supabase.auth.getUser()
+  if (error?.name === 'AuthSessionMissingError') {
+    return null
+  }
   handleSupabaseError(error)
   return user
 }

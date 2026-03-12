@@ -498,7 +498,7 @@ Minimum score is clamped to 0.
 - TipTap editor used for rich text editing (React 19 compatible, replaced ReactQuill)
 - Client-side API keys - security risk, needs Edge Functions migration
 - Desktop-first design - no mobile optimization
-- Navigation: `<Outlet>` in MainLayout MUST have `key={location.pathname.split('/')[1] || 'index'}` to prevent pages from getting stuck (especially the article editor). Do NOT remove this key.
+- Navigation: `<Outlet key={location.pathname} />` in MainLayout forces child remount on route changes. Sidebar links use explicit `navigate()` calls (not `<Link>`) to guarantee route transitions work from any page. Do NOT remove the Outlet key or revert to `<Link>` — React Router v7 + React 19 has issues with `<Link>` triggering Outlet re-renders.
 
 See `docs/v5-updates/07-REMAINING-IMPLEMENTATION.md` for detailed gap analysis.
 
