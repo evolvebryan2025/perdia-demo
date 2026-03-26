@@ -84,7 +84,8 @@ async function applyRateLimiting() {
 }
 
 /**
- * Publish an article via WordPress REST API (preferred method)
+ * Publish an article via WordPress REST API using Supabase Edge Function
+ * Routes through server-side Edge Function to avoid browser CORS restrictions
  * @param {Object} article - The article to publish
  * @param {Object} options - Publishing options
  * @returns {Object} Result with success status and details
@@ -98,6 +99,7 @@ export async function publishToWordPress(article, options = {}) {
     requireMonetization = true,
     blockUnknownShortcodes = true,
     useAsyncValidation = true,
+    connectionId = null,
   } = options
 
   // Run pre-publish validation
@@ -127,48 +129,55 @@ export async function publishToWordPress(article, options = {}) {
   await applyRateLimiting()
 
   try {
-    // Create WordPress client for the target environment
-    const wpClient = new WordPressClient({ environment })
+    // Find an active WordPress connection if not provided
+    let wpConnectionId = connectionId
+    if (!wpConnectionId) {
+      const { data: connections } = await supabase
+        .from('wordpress_connections')
+        .select('id, site_url')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
 
-    // Publish via WordPress REST API
-    console.log(`[PublishService] Publishing to WordPress (${environment}): ${article.title}`)
+      if (connections && connections.length > 0) {
+        wpConnectionId = connections[0].id
+      }
+    }
 
-    const result = await wpClient.createPost(article, {
-      status: status === 'publish' ? 'publish' : 'draft',
+    if (!wpConnectionId) {
+      throw new Error('No active WordPress connection found. Configure one in Settings > Integrations.')
+    }
+
+    if (!article.id) {
+      throw new Error('Article must be saved before publishing to WordPress.')
+    }
+
+    console.log(`[PublishService] Publishing to WordPress via Edge Function (${environment}): ${article.title}`)
+
+    // Use Supabase Edge Function for server-side WordPress API call (avoids CORS)
+    const { data, error } = await supabase.functions.invoke('publish-to-wordpress', {
+      body: { articleId: article.id, connectionId: wpConnectionId },
     })
 
-    // Update article in database
-    if (updateDatabase && result.success) {
-      const updateData = {
-        status: 'published',
-        published_at: new Date().toISOString(),
-        wordpress_post_id: result.post_id,
-        published_url: result.url,
-      }
+    if (error) {
+      throw new Error(error.message || 'Edge Function invocation failed')
+    }
 
-      const { error: updateError } = await supabase
-        .from('articles')
-        .update(updateData)
-        .eq('id', article.id)
+    if (!data.success) {
+      throw new Error(data.error || 'WordPress publishing failed')
+    }
 
-      if (updateError) {
-        console.error('Failed to update article status:', updateError)
-      }
-
-      // Sync to catalog for internal linking
-      if (result.url) {
-        await syncToGetEducatedCatalog(article, result.url)
-      }
+    // Sync to catalog for internal linking
+    if (data.published_url) {
+      await syncToGetEducatedCatalog(article, data.published_url)
     }
 
     return {
       success: true,
       method: 'wordpress',
       articleId: article.id,
-      postId: result.post_id,
-      url: result.url,
-      contributorId: result.contributor_id,
-      contributorName: result.contributor_name,
+      postId: data.wordpress_post_id,
+      url: data.published_url,
       publishedAt: new Date().toISOString(),
       environment,
     }

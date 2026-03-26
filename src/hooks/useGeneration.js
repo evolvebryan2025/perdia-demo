@@ -98,6 +98,42 @@ export function useGenerateArticle() {
 }
 
 /**
+ * Regenerate article content only (no database save).
+ * Use this when updating an existing article — call updateArticle separately to save.
+ */
+export function useRegenerateContent() {
+  return useMutation({
+    mutationFn: async ({ idea, options, onProgress }) => {
+      await loadHumanizationSettings()
+
+      const articleData = await generationService.generateArticleComplete(
+        idea,
+        {
+          contentType: options?.contentType || 'guide',
+          targetWordCount: options?.targetWordCount || 2000,
+          autoAssignContributor: false,
+          addInternalLinks: options?.addInternalLinks !== false,
+          autoFix: options?.autoFix !== false,
+          maxFixAttempts: options?.maxFixAttempts || 3,
+        },
+        onProgress
+      )
+
+      // Guard against empty content from failed generation
+      if (!articleData?.content) {
+        throw new Error('Regeneration produced no content')
+      }
+
+      // Return generated data WITHOUT saving to database
+      return articleData
+    },
+    onError: (error) => {
+      console.error('[useRegenerateContent] Generation failed:', error)
+    },
+  })
+}
+
+/**
  * Auto-fix quality issues in an article
  */
 export function useAutoFixQuality() {
@@ -315,13 +351,10 @@ export function useReviseWithFeedback() {
       // Per Bug #3: Prevents logos/images from appearing in AI-revised content
       const contentWithoutImages = stripImagesFromHtml(content)
 
-      // Format feedback items for the prompt
-      const feedbackText = feedbackItems
-        .map((item, i) => `${i + 1}. ${item.comment}`)
-        .join('\n')
-
-      // FIX #2: Check if any feedback is about links
-      const feedbackLower = feedbackText.toLowerCase()
+      // Check if any feedback is about links to determine if we need site articles
+      const feedbackLower = feedbackItems
+        .map(item => (item.comment || item).toLowerCase())
+        .join(' ')
       const isLinkRelated = feedbackLower.includes('link') ||
                            feedbackLower.includes('source') ||
                            feedbackLower.includes('cite') ||
@@ -331,82 +364,30 @@ export function useReviseWithFeedback() {
                            feedbackLower.includes('school') ||
                            feedbackLower.includes('replace')
 
-      // If link-related, fetch relevant internal links with type labels
-      let internalLinkContext = ''
+      // Fetch site articles for link context when feedback mentions links
+      let siteArticles = []
       if (isLinkRelated) {
         try {
-          const relevantArticles = await generationService.getRelevantSiteArticles(title, 15, { topics })
-          if (relevantArticles.length > 0) {
-            internalLinkContext = `\nAVAILABLE GETEDUCATED PAGES (use these for any link requests):\n${relevantArticles.map(a => {
-              const typeLabel = a.content_type === 'degree_category' ? '[BERP]' :
-                                a.content_type === 'ranking' ? '[RANKING]' :
-                                a.content_type === 'school_profile' ? '[SCHOOL]' :
-                                '[ARTICLE]'
-              return `- ${typeLabel} ${a.title}: ${a.url}`
-            }).join('\n')}\n\nIMPORTANT: When feedback asks to "link to GetEducated's X page", search this list for the best match. NEVER invent URLs. If no matching page exists, leave a comment like <!-- NO MATCHING PAGE FOUND FOR: [topic] --> rather than inventing a URL.\n`
-          }
+          siteArticles = await generationService.getRelevantSiteArticles(title, 15, { topics })
         } catch (e) {
-          console.warn('[useReviseWithFeedback] Could not fetch internal links:', e)
+          console.warn('[useReviseWithFeedback] Could not fetch site articles:', e)
         }
       }
 
-      // FIX #2: Always include linking rules to prevent AI suggesting bad links
-      const linkingRules = `
-=== CRITICAL LINKING RULES (MUST FOLLOW) ===
+      // Use Claude's reviseWithFeedback method with structured feedback
+      // Adapt simple feedback items to the format reviseWithFeedback expects
+      const structuredFeedback = feedbackItems.map((item) => ({
+        category: 'editorial',
+        severity: 'medium',
+        selected_text: '',
+        comment: item.comment || item,
+      }))
 
-1. NEVER link directly to school websites (.edu domains)
-   - Instead, link to GetEducated school pages: geteducated.com/online-schools/
-
-2. NEVER link to COMPETITOR sites:
-   - onlineu.com, usnews.com, bestcolleges.com, niche.com
-   - collegeraptor.com, affordablecollegesonline.com
-   - collegeconfidential.com, petersons.com, princetonreview.com
-
-3. External links should ONLY go to:
-   - Bureau of Labor Statistics (bls.gov)
-   - Government sites (.gov)
-   - Nonprofit educational organizations
-
-4. If you cannot find a valid source, rewrite the sentence to not need a citation
-   - Do NOT invent URLs or use blocked sources
-
-=== END LINKING RULES ===
-`
-
-      const prompt = `You are revising an article based on editorial feedback.
-
-ARTICLE TITLE: ${title}
-CONTENT TYPE: ${contentType || 'guide'}
-FOCUS KEYWORD: ${focusKeyword || 'N/A'}
-
-EDITORIAL FEEDBACK TO ADDRESS:
-${feedbackText}
-${linkingRules}${internalLinkContext}
-CURRENT ARTICLE CONTENT:
-${contentWithoutImages}
-
-INSTRUCTIONS:
-1. Carefully address ALL the feedback items listed above
-2. Maintain the article's overall structure and tone
-3. Keep all existing HTML formatting intact
-4. Do not remove existing content unless specifically requested
-5. Make changes that directly respond to the feedback
-6. Ensure the article remains coherent and well-organized
-7. Keep the content length similar unless asked to expand/reduce
-8. STRICTLY follow the linking rules - never link to competitors or .edu sites
-
-OUTPUT ONLY THE COMPLETE REVISED HTML CONTENT (no explanations, no commentary).`
-
-      // Use Claude to revise with feedback
-      const revisedContent = await generationService.claude.chat([
-        {
-          role: 'user',
-          content: prompt
-        }
-      ], {
-        temperature: 0.7,
-        max_tokens: 4500,
-      })
+      const revisedContent = await generationService.claude.reviseWithFeedback(
+        contentWithoutImages,
+        structuredFeedback,
+        { siteArticles }
+      )
 
       return { content: revisedContent }
     },

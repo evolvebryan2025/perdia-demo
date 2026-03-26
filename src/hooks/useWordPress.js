@@ -119,36 +119,24 @@ export function usePublishToWordPress() {
 
 /**
  * Test WordPress connection
+ * Uses Edge Function for server-side request (avoids CORS)
  */
 export function useTestWordPressConnection() {
   return useMutation({
     mutationFn: async (connection) => {
-      // Test by trying to authenticate
-      const auth = btoa(`${connection.username}:${connection.password}`)
-
-      const response = await fetch(`${connection.site_url}/wp-json/wp/v2/posts`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Basic ${auth}`,
-        },
+      const { data, error } = await supabase.functions.invoke('test-wordpress-connection', {
+        body: { connectionId: connection.id },
       })
 
-      if (!response.ok) {
-        throw new Error('Connection test failed. Check your credentials and site URL.')
+      if (error) {
+        throw new Error(error.message || 'Connection test failed')
       }
 
-      // Update last test time
-      const { error } = await supabase
-        .from('wordpress_connections')
-        .update({
-          last_test_at: new Date().toISOString(),
-          last_test_success: true,
-        })
-        .eq('id', connection.id)
+      if (!data.success) {
+        throw new Error(data.error || 'Connection test failed. Check your credentials and site URL.')
+      }
 
-      if (error) console.error('Error updating test status:', error)
-
-      return { success: true, message: 'Connection successful!' }
+      return data
     },
   })
 }
