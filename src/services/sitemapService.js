@@ -12,15 +12,24 @@
 
 import { supabase } from './supabaseClient'
 
+// Use Vercel proxy rewrites to avoid CORS issues in production
+const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+
 // GetEducated sitemap URL
-const SITEMAP_URL = 'https://www.geteducated.com/sitemap.xml'
+const SITEMAP_URL = isVercel ? '/api/wp-prod/sitemap.xml' : 'https://www.geteducated.com/sitemap.xml'
 
 // Sitemap index may contain multiple sitemaps
-const SITEMAP_INDEX_URLS = [
-  'https://www.geteducated.com/sitemap.xml',
-  'https://www.geteducated.com/page-sitemap.xml',
-  'https://www.geteducated.com/post-sitemap.xml',
-]
+const SITEMAP_INDEX_URLS = isVercel
+  ? [
+      '/api/wp-prod/sitemap.xml',
+      '/api/wp-prod/page-sitemap.xml',
+      '/api/wp-prod/post-sitemap.xml',
+    ]
+  : [
+      'https://www.geteducated.com/sitemap.xml',
+      'https://www.geteducated.com/page-sitemap.xml',
+      'https://www.geteducated.com/post-sitemap.xml',
+    ]
 
 // URL patterns to include (priority order)
 // CRITICAL: Must include ALL content types per Dec 2025 meeting

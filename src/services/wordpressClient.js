@@ -14,9 +14,11 @@
 import { AUTHOR_DISPLAY_NAMES } from '../hooks/useContributors'
 
 // WordPress API endpoints
+// Use Vercel proxy rewrites to avoid CORS issues in production
+const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
 const WP_API_ENDPOINTS = {
-  staging: 'https://stage.geteducated.com/wp-json/wp/v2',
-  production: 'https://www.geteducated.com/wp-json/wp/v2',
+  staging: isVercel ? '/api/wp-stage/wp-json/wp/v2' : 'https://stage.geteducated.com/wp-json/wp/v2',
+  production: isVercel ? '/api/wp-prod/wp-json/wp/v2' : 'https://www.geteducated.com/wp-json/wp/v2',
 }
 
 // Site-level basic auth for staging (if API whitelist not active)
@@ -107,6 +109,11 @@ class WordPressClient {
    */
   buildUrl(endpoint) {
     const baseUrl = WP_API_ENDPOINTS[this.environment]
+
+    // When using Vercel proxy (relative paths), skip site-level auth embedding
+    if (isVercel) {
+      return baseUrl + endpoint
+    }
 
     if (this.useSiteAuth && this.siteAuthUsername && this.siteAuthPassword) {
       // Embed site-level auth in URL: https://user:pass@host/path
@@ -344,8 +351,8 @@ class WordPressClient {
    */
   async fetchContributorSitemap() {
     const sitemapUrl = this.environment === 'production'
-      ? 'https://www.geteducated.com/article_contributor-sitemap.xml'
-      : 'https://stage.geteducated.com/article_contributor-sitemap.xml'
+      ? (isVercel ? '/api/wp-prod/article_contributor-sitemap.xml' : 'https://www.geteducated.com/article_contributor-sitemap.xml')
+      : (isVercel ? '/api/wp-stage/article_contributor-sitemap.xml' : 'https://stage.geteducated.com/article_contributor-sitemap.xml')
 
     const response = await fetch(sitemapUrl)
     const xml = await response.text()
