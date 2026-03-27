@@ -52,11 +52,23 @@ serve(async (req) => {
       authHeader = `Basic ${credentials}`
     }
 
+    // Build the test URL
+    let testUrl = `${connection.site_url}/wp-json/wp/v2/posts?per_page=1`
+
+    // For staging sites, embed site-level basic auth in URL if needed
+    // (staging may require separate site-level auth from WP app password)
+    if (connection.site_url?.includes('stage.geteducated.com')) {
+      const url = new URL(testUrl)
+      url.username = 'ge2022'
+      url.password = 'get!educated'
+      testUrl = url.toString()
+    }
+
     // Test by fetching posts endpoint (GET request, read-only)
-    const wpResponse = await fetch(`${connection.site_url}/wp-json/wp/v2/posts?per_page=1`, {
+    const wpResponse = await fetch(testUrl, {
       method: 'GET',
       headers: {
-        'Authorization': authHeader,
+        ...(authHeader ? { 'Authorization': authHeader } : {}),
         'User-Agent': 'Perdia/1.0',
       },
     })
@@ -92,6 +104,8 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('WordPress connection test error:', error)
+    // Return 200 with success:false so Supabase JS client doesn't throw
+    // "Edge Function returned a non-2xx status code" and swallow the real error
     return new Response(
       JSON.stringify({
         success: false,
@@ -99,7 +113,7 @@ serve(async (req) => {
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
+        status: 200,
       }
     )
   }
