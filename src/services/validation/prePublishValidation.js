@@ -222,12 +222,13 @@ export function validateForPublish(article, options = {}) {
         })
       })
       
-      // High-severity uncited statistics are blocking issues
+      // Uncited statistics are warnings, not blocking issues
+      // Previously blocked publishing — downgraded per Josh Dennis feedback (2026-03-30)
       const criticalUncited = statsValidation.issues.filter(i => i.severity === 'high')
       if (criticalUncited.length > 0) {
-        result.blockingIssues.push({
+        result.warnings.push({
           type: 'uncited_critical_statistic',
-          message: `${criticalUncited.length} salary/cost claims without citations. These must be verified or removed.`,
+          message: `${criticalUncited.length} salary/cost claims without citations. Consider verifying these.`,
           details: criticalUncited.map(i => i.statistic),
         })
       }

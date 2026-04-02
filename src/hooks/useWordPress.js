@@ -119,11 +119,51 @@ export function usePublishToWordPress() {
 
 /**
  * Test WordPress connection
- * Uses Edge Function for server-side request (avoids CORS)
+ * Tests directly via Vercel proxy (avoids CORS) or falls back to Edge Function
  */
 export function useTestWordPressConnection() {
+  const queryClient = useQueryClient()
+
   return useMutation({
     mutationFn: async (connection) => {
+      const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+
+      if (isVercel) {
+        // Use Vercel proxy to test WordPress connection directly
+        let testUrl = ''
+        if (connection.site_url?.includes('stage.geteducated.com')) {
+          testUrl = '/api/wp-stage/wp-json/wp/v2/posts?per_page=1'
+        } else if (connection.site_url?.includes('geteducated.com')) {
+          testUrl = '/api/wp-prod/wp-json/wp/v2/posts?per_page=1'
+        } else {
+          // For non-GetEducated sites, try direct (may fail with CORS)
+          testUrl = `${connection.site_url}/wp-json/wp/v2/posts?per_page=1`
+        }
+
+        const headers = {}
+        if (connection.username && connection.password) {
+          headers['Authorization'] = `Basic ${btoa(`${connection.username}:${connection.password}`)}`
+        }
+
+        const response = await fetch(testUrl, { headers })
+
+        if (!response.ok) {
+          throw new Error(`WordPress API returned ${response.status}: ${response.statusText}`)
+        }
+
+        // Update test status in database
+        await supabase
+          .from('wordpress_connections')
+          .update({
+            last_test_at: new Date().toISOString(),
+            last_test_success: true,
+          })
+          .eq('id', connection.id)
+
+        return { success: true, message: 'Connection successful!' }
+      }
+
+      // Fallback: use Edge Function for local development
       const { data, error } = await supabase.functions.invoke('test-wordpress-connection', {
         body: { connectionId: connection.id },
       })
@@ -137,6 +177,9 @@ export function useTestWordPressConnection() {
       }
 
       return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['wordpress_connections'] })
     },
   })
 }
