@@ -201,6 +201,12 @@ export async function publishToWordPress(article, options = {}) {
  * @returns {Object} Result with success status and details
  */
 export async function publishArticle(article, options = {}) {
+  // On Vercel, use WordPress Edge Function path instead of n8n webhook (avoids CORS)
+  const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+  if (isVercel) {
+    return publishToWordPress(article, options)
+  }
+
   const {
     status = 'draft', // 'draft' or 'publish'
     validateFirst = true,
