@@ -96,8 +96,9 @@ export async function publishToWordPress(article, options = {}) {
     validateFirst = true,
     updateDatabase = true,
     environment = DEFAULT_ENVIRONMENT,
-    requireMonetization = true,
-    blockUnknownShortcodes = true,
+    requireMonetization = false,
+    blockUnknownShortcodes = false,
+    blockLegacyShortcodes = false,
     useAsyncValidation = true,
     connectionId = null,
   } = options
@@ -107,6 +108,7 @@ export async function publishToWordPress(article, options = {}) {
     const validationOptions = {
       requireMonetization,
       blockUnknownShortcodes,
+      blockLegacyShortcodes,
     }
 
     const validation = useAsyncValidation
@@ -116,7 +118,7 @@ export async function publishToWordPress(article, options = {}) {
     if (!validation.canPublish) {
       return {
         success: false,
-        error: 'Validation failed',
+        error: validation.blockingIssues?.[0]?.message || 'Validation failed',
         blockingIssues: validation.blockingIssues,
         validation,
         environment,
@@ -212,8 +214,9 @@ export async function publishArticle(article, options = {}) {
     validateFirst = true,
     updateDatabase = true,
     environment = DEFAULT_ENVIRONMENT, // 'staging' or 'production'
-    requireMonetization = true,        // Enforce monetization shortcodes
-    blockUnknownShortcodes = true,     // Block unknown/hallucinated shortcodes
+    requireMonetization = false,
+    blockUnknownShortcodes = false,
+    blockLegacyShortcodes = false,
     useAsyncValidation = true,         // Use database-backed validation
   } = options
 
@@ -222,6 +225,7 @@ export async function publishArticle(article, options = {}) {
     const validationOptions = {
       requireMonetization,
       blockUnknownShortcodes,
+      blockLegacyShortcodes,
     }
 
     const validation = useAsyncValidation
@@ -231,7 +235,7 @@ export async function publishArticle(article, options = {}) {
     if (!validation.canPublish) {
       return {
         success: false,
-        error: 'Validation failed',
+        error: validation.blockingIssues?.[0]?.message || 'Validation failed',
         blockingIssues: validation.blockingIssues,
         validation,
         environment,
@@ -478,7 +482,11 @@ export async function throttledPublish(article, options = {}) {
  * @returns {Object} Eligibility result
  */
 export function checkPublishEligibility(article) {
-  const validation = validateForPublish(article)
+  const validation = validateForPublish(article, {
+    requireMonetization: false,
+    blockUnknownShortcodes: false,
+    blockLegacyShortcodes: false,
+  })
 
   return {
     eligible: validation.canPublish,

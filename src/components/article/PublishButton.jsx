@@ -19,6 +19,7 @@ const PRODUCTION_AVAILABLE = PRODUCTION_CONFIGURED
 export default function PublishButton({ article, onPublished, className = '' }) {
   const [showConfirm, setShowConfirm] = useState(false)
   const [selectedEnvironment, setSelectedEnvironment] = useState('staging')
+  const [publishError, setPublishError] = useState(null)
   const publishMutation = usePublishArticle()
   const eligibility = usePublishEligibility(article)
 
@@ -34,6 +35,8 @@ export default function PublishButton({ article, onPublished, className = '' }) 
       return // Don't publish if environment not configured
     }
 
+    setPublishError(null)
+
     try {
       const result = await publishMutation.mutateAsync({
         article,
@@ -47,9 +50,13 @@ export default function PublishButton({ article, onPublished, className = '' }) 
       if (result.success) {
         setShowConfirm(false)
         onPublished?.(result)
+      } else {
+        // Show the actual error from the Edge Function / publish service
+        setPublishError(result.error || 'Publishing failed. Check console for details.')
       }
     } catch (error) {
       console.error('Publish error:', error)
+      setPublishError(error.message || 'An unexpected error occurred')
     }
   }
 
@@ -245,9 +252,9 @@ export default function PublishButton({ article, onPublished, className = '' }) 
             </div>
 
             {/* Error Display */}
-            {publishMutation.error && (
+            {(publishError || publishMutation.error) && (
               <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
-                Error: {publishMutation.error.message}
+                Publish failed: {publishError || publishMutation.error?.message}
               </div>
             )}
           </div>
