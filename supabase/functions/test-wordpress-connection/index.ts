@@ -53,23 +53,16 @@ serve(async (req) => {
     }
 
     // Build the test URL
-    let testUrl = `${connection.site_url}/wp-json/wp/v2/posts?per_page=1`
-
-    // For staging sites, embed site-level basic auth in URL if needed
-    // (staging may require separate site-level auth from WP app password)
-    if (connection.site_url?.includes('stage.geteducated.com')) {
-      const url = new URL(testUrl)
-      url.username = 'ge2022'
-      url.password = 'get!educated'
-      testUrl = url.toString()
-    }
+    // Do NOT embed site-level basic auth — conflicts with Application Password.
+    // Per J Day's confirmed working curl (2026-04-13), only the App Password is needed.
+    const testUrl = `${connection.site_url}/wp-json/wp/v2/posts?per_page=1`
 
     // Test by fetching posts endpoint (GET request, read-only)
     const wpResponse = await fetch(testUrl, {
       method: 'GET',
       headers: {
         ...(authHeader ? { 'Authorization': authHeader } : {}),
-        'User-Agent': 'Perdia/1.0',
+        'User-Agent': 'DisruptorsMedia/1.0',
       },
     })
 

@@ -129,38 +129,27 @@ export function useTestWordPressConnection() {
       const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
 
       if (isVercel) {
-        // Use Vercel proxy to test WordPress connection directly
-        let testUrl = ''
-        if (connection.site_url?.includes('stage.geteducated.com')) {
-          testUrl = '/api/wp-stage/wp-json/wp/v2/posts?per_page=1'
-        } else if (connection.site_url?.includes('geteducated.com')) {
-          testUrl = '/api/wp-prod/wp-json/wp/v2/posts?per_page=1'
-        } else {
-          // For non-GetEducated sites, try direct (may fail with CORS)
-          testUrl = `${connection.site_url}/wp-json/wp/v2/posts?per_page=1`
+        // Use US-region Vercel serverless function (iad1) — stage.geteducated.com
+        // IP-whitelists US-based servers. Other regions hit a Private Area 401.
+        const { data: { session } } = await supabase.auth.getSession()
+        const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY
+
+        const response = await fetch('/api/test-wp-connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            connectionId: connection.id,
+            supabaseAuthToken: token,
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!data.success) {
+          throw new Error(data.error || 'Connection test failed')
         }
 
-        const headers = {}
-        if (connection.username && connection.password) {
-          headers['Authorization'] = `Basic ${btoa(`${connection.username}:${connection.password}`)}`
-        }
-
-        const response = await fetch(testUrl, { headers })
-
-        if (!response.ok) {
-          throw new Error(`WordPress API returned ${response.status}: ${response.statusText}`)
-        }
-
-        // Update test status in database
-        await supabase
-          .from('wordpress_connections')
-          .update({
-            last_test_at: new Date().toISOString(),
-            last_test_success: true,
-          })
-          .eq('id', connection.id)
-
-        return { success: true, message: 'Connection successful!' }
+        return data
       }
 
       // Fallback: use Edge Function for local development

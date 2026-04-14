@@ -154,19 +154,44 @@ export async function publishToWordPress(article, options = {}) {
       throw new Error('Article must be saved before publishing to WordPress.')
     }
 
-    console.log(`[PublishService] Publishing to WordPress via Edge Function (${environment}): ${article.title}`)
+    console.log(`[PublishService] Publishing to WordPress (${environment}): ${article.title}`)
 
-    // Use Supabase Edge Function for server-side WordPress API call (avoids CORS)
-    const { data, error } = await supabase.functions.invoke('publish-to-wordpress', {
-      body: { articleId: article.id, connectionId: wpConnectionId },
-    })
+    // On Vercel, use US-region serverless function (stage.geteducated.com has US IP whitelist)
+    // Supabase Edge Functions run from various regions (SIN, etc.) which get 401'd by the
+    // site's Private Area Basic Auth. Vercel iad1 (US East) is on the whitelist.
+    const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+
+    let data, error
+    if (isVercel) {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY
+
+      const response = await fetch('/api/publish-wp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleId: article.id,
+          connectionId: wpConnectionId,
+          supabaseAuthToken: token,
+        }),
+      })
+      data = await response.json()
+      error = null
+    } else {
+      // Local dev: use Supabase Edge Function
+      const result = await supabase.functions.invoke('publish-to-wordpress', {
+        body: { articleId: article.id, connectionId: wpConnectionId },
+      })
+      data = result.data
+      error = result.error
+    }
 
     if (error) {
       throw new Error(error.message || 'Edge Function invocation failed')
     }
 
-    if (!data.success) {
-      throw new Error(data.error || 'WordPress publishing failed')
+    if (!data?.success) {
+      throw new Error(data?.error || 'WordPress publishing failed')
     }
 
     // Sync to catalog for internal linking

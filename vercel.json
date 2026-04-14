@@ -2,6 +2,6 @@
   "rewrites": [
     { "source": "/api/wp-stage/:path*", "destination": "https://stage.geteducated.com/:path*" },
     { "source": "/api/wp-prod/:path*", "destination": "https://www.geteducated.com/:path*" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

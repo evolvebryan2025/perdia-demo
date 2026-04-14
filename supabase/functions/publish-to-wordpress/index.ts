@@ -151,23 +151,20 @@ serve(async (req) => {
     }
 
     // Build WordPress API URL
-    let wpApiUrl = `${connection.site_url}/wp-json/wp/v2/posts`
+    // IMPORTANT: Do NOT embed site-level basic auth (ge2022:get!educated) in the URL.
+    // HTTP Basic Auth only supports ONE credential per request — embedding site-level
+    // auth conflicts with the Application Password in the Authorization header.
+    // Per J Day's confirmed working curl (2026-04-13), only the Application Password
+    // is needed to publish to stage.geteducated.com.
+    const wpApiUrl = `${connection.site_url}/wp-json/wp/v2/posts`
 
-    // For staging sites, embed site-level basic auth in URL if needed
-    if (connection.site_url?.includes('stage.geteducated.com')) {
-      const url = new URL(wpApiUrl)
-      url.username = 'ge2022'
-      url.password = 'get!educated'
-      wpApiUrl = url.toString()
-    }
-
-    // Publish to WordPress
+    // Publish to WordPress — match J Day's working curl exactly
     const wpResponse = await fetch(wpApiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(authHeader ? { 'Authorization': authHeader } : {}),
-        'User-Agent': 'Perdia/1.0',
+        'User-Agent': 'DisruptorsMedia/1.0',
       },
       body: JSON.stringify(postData),
     })
