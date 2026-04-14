@@ -76,9 +76,14 @@ export default async function handler(req, res) {
 
     if (!wpResponse.ok) {
       const errorText = await wpResponse.text()
+      const wwwAuth = wpResponse.headers.get('www-authenticate') || ''
       return res.status(200).json({
         success: false,
         error: `WordPress API returned ${wpResponse.status}: ${errorText.slice(0, 300)}`,
+        wwwAuthenticate: wwwAuth,
+        diagnostic: wwwAuth.includes('Private Area')
+          ? 'Site-level Apache Basic Auth blocking request. Vercel iad1 IPs need to be whitelisted at stage.geteducated.com .htaccess — contact Justin/J Day.'
+          : 'WordPress Application Password auth failed. Verify username/password are correct.',
       })
     }
 
