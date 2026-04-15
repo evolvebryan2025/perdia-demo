@@ -34,9 +34,18 @@ export default async function handler(req, res) {
       })
     }
 
+    // Use service role key for DB access (user is authenticated; bypass RLS)
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!serviceKey) {
+      return res.status(200).json({
+        success: false,
+        error: 'Server misconfigured: SUPABASE_SERVICE_ROLE_KEY not set',
+      })
+    }
+
     const supabaseHeaders = {
-      'apikey': supabaseAuthToken,
-      'Authorization': `Bearer ${supabaseAuthToken}`,
+      'apikey': serviceKey,
+      'Authorization': `Bearer ${serviceKey}`,
     }
 
     const connRes = await fetch(
