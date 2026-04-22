@@ -1587,9 +1587,11 @@ CRITICAL: Actually make the changes. OUTPUT ONLY THE COMPLETE FIXED HTML. No exp
       console.log(`[Generation] Subject detection: "${detectedSubject.label}" (${detectedSubject.confidence}% confidence)`)
       
       // Step 2: Fetch candidates from database (broader set for scoring)
+      // Include monetization priority fields (is_sponsored, school_priority) so
+      // getClientSchoolBoost() in subjectMatcher can prioritize sponsored/priority pages.
       const { data: geArticles, error: geError } = await supabase
         .from('geteducated_articles')
-        .select('id, url, title, excerpt, topics, content_type, degree_level, subject_area, times_linked_to')
+        .select('id, url, title, excerpt, topics, content_type, degree_level, subject_area, times_linked_to, is_sponsored, school_priority, sitemap_priority')
         .not('content_text', 'is', null) // Only enriched articles
         .eq('is_active', true)
         .limit(limit * 3) // Fetch more to allow for filtering

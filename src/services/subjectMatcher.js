@@ -235,8 +235,14 @@ export function getPageTypeMultiplier(pageType) {
  * @returns {number} Additional multiplier (2.0 for client schools, 1.0 otherwise)
  */
 export function getClientSchoolBoost(article) {
-  // Check for explicit client/sponsored flag
+  // Check for explicit client/sponsored flag (legacy field)
   if (article.is_client === true) {
+    return 2.0
+  }
+
+  // Check is_sponsored flag populated by the sitemap crawler
+  // (true when page has a school logo or school_priority >= 5)
+  if (article.is_sponsored === true) {
     return 2.0
   }
 
@@ -246,9 +252,6 @@ export function getClientSchoolBoost(article) {
   }
 
   // No client data available - no boost
-  // NOTE: When client school data becomes available in the geteducated_articles or
-  // geteducated_schools tables, update this function to cross-reference and apply
-  // the 2x boost for sponsored/paid schools.
   return 1.0
 }
 

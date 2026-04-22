@@ -73,7 +73,7 @@ export default async function handler(req, res) {
     const authHeader = `Basic ${credentials}`
 
     const wpResponse = await fetch(
-      `${connection.site_url}/wp-json/wp/v2/posts?per_page=1`,
+      `${connection.site_url}/wp-json/wp/v2/pages?per_page=1`,
       {
         method: 'GET',
         headers: {

@@ -117,7 +117,7 @@ export default async function handler(req, res) {
     const credentials = Buffer.from(`${connection.username}:${connection.password}`).toString('base64')
     const authHeader = `Basic ${credentials}`
 
-    const wpResponse = await fetch(`${connection.site_url}/wp-json/wp/v2/posts`, {
+    const wpResponse = await fetch(`${connection.site_url}/wp-json/wp/v2/pages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
