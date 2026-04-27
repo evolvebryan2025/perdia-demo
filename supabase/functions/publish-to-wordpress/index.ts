@@ -156,7 +156,7 @@ serve(async (req) => {
     // auth conflicts with the Application Password in the Authorization header.
     // Per J Day's confirmed working curl (2026-04-13), only the Application Password
     // is needed to publish to stage.geteducated.com.
-    const wpApiUrl = `${connection.site_url}/wp-json/wp/v2/posts`
+    const wpApiUrl = `${connection.site_url}/wp-json/wp/v2/pages`
 
     // Publish to WordPress — match J Day's working curl exactly
     const wpResponse = await fetch(wpApiUrl, {

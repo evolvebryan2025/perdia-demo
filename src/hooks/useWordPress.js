@@ -126,9 +126,13 @@ export function useTestWordPressConnection() {
 
   return useMutation({
     mutationFn: async (connection) => {
-      const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+      // Use US-region Vercel serverless function whenever we're not on localhost dev
+      // (vercel.app and custom domains both need this path; only localhost falls back to
+      // the Supabase Edge Function).
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
+      const isLocalDev = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === ''
 
-      if (isVercel) {
+      if (!isLocalDev) {
         // Use US-region Vercel serverless function (iad1) — stage.geteducated.com
         // IP-whitelists US-based servers. Other regions hit a Private Area 401.
         const { data: { session } } = await supabase.auth.getSession()

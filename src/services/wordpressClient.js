@@ -253,10 +253,10 @@ class WordPressClient {
       },
     }
 
-    console.log(`[WordPressClient] Creating post: "${article.title}" (status: ${status})`)
+    console.log(`[WordPressClient] Creating page: "${article.title}" (status: ${status})`)
     console.log(`[WordPressClient] Contributor: ${displayName} (CPT ID: ${contributorId})`)
 
-    const response = await this.request('/posts', {
+    const response = await this.request('/pages', {
       method: 'POST',
       body: JSON.stringify(postData),
     })
@@ -280,7 +280,7 @@ class WordPressClient {
    * @returns {Promise<Object>} Updated post data
    */
   async updatePost(postId, updates) {
-    const response = await this.request(`/posts/${postId}`, {
+    const response = await this.request(`/pages/${postId}`, {
       method: 'POST',  // WordPress uses POST for updates too
       body: JSON.stringify(updates),
     })
@@ -299,7 +299,7 @@ class WordPressClient {
    * @returns {Promise<Object>} Post data
    */
   async getPost(postId) {
-    return this.request(`/posts/${postId}`)
+    return this.request(`/pages/${postId}`)
   }
 
   /**
@@ -309,7 +309,7 @@ class WordPressClient {
    * @returns {Promise<Object>} Deleted post data
    */
   async deletePost(postId, force = false) {
-    return this.request(`/posts/${postId}?force=${force}`, {
+    return this.request(`/pages/${postId}?force=${force}`, {
       method: 'DELETE',
     })
   }

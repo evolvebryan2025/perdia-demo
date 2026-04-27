@@ -55,7 +55,7 @@ serve(async (req) => {
     // Build the test URL
     // Do NOT embed site-level basic auth — conflicts with Application Password.
     // Per J Day's confirmed working curl (2026-04-13), only the App Password is needed.
-    const testUrl = `${connection.site_url}/wp-json/wp/v2/posts?per_page=1`
+    const testUrl = `${connection.site_url}/wp-json/wp/v2/pages?per_page=1`
 
     // Test by fetching posts endpoint (GET request, read-only)
     const wpResponse = await fetch(testUrl, {

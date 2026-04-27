@@ -156,13 +156,18 @@ export async function publishToWordPress(article, options = {}) {
 
     console.log(`[PublishService] Publishing to WordPress (${environment}): ${article.title}`)
 
-    // On Vercel, use US-region serverless function (stage.geteducated.com has US IP whitelist)
-    // Supabase Edge Functions run from various regions (SIN, etc.) which get 401'd by the
-    // site's Private Area Basic Auth. Vercel iad1 (US East) is on the whitelist.
-    const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+    // Use US-region Vercel serverless function for production (stage.geteducated.com has
+    // US IP whitelist; Supabase Edge Functions run from various regions, e.g. SIN, which
+    // get 401'd by the site's Private Area Basic Auth). The Vercel function /api/publish-wp
+    // is pinned to iad1 (US East) which is on the whitelist.
+    // Only fall back to the Supabase Edge Function when running on localhost/dev — when
+    // deployed to any non-localhost host (vercel.app, custom domain), use /api/publish-wp.
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
+    const isLocalDev = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === ''
+    const useVercelApi = !isLocalDev
 
     let data, error
-    if (isVercel) {
+    if (useVercelApi) {
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY
 
@@ -228,9 +233,12 @@ export async function publishToWordPress(article, options = {}) {
  * @returns {Object} Result with success status and details
  */
 export async function publishArticle(article, options = {}) {
-  // On Vercel, use WordPress Edge Function path instead of n8n webhook (avoids CORS)
-  const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
-  if (isVercel) {
+  // Always route through publishToWordPress when not running on localhost dev.
+  // (vercel.app, custom domains, etc. all should hit the Vercel API path inside
+  // publishToWordPress; n8n webhook path is bypassed since direct push works.)
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
+  const isLocalDev = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === ''
+  if (!isLocalDev) {
     return publishToWordPress(article, options)
   }
 
