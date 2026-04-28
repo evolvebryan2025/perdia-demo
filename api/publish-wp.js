@@ -1,3 +1,5 @@
+import { transformContentForPublish } from '../src/services/wpContentTransform.js'
+
 export const config = {
   runtime: 'nodejs',
   regions: ['iad1'],
@@ -50,7 +52,7 @@ export default async function handler(req, res) {
     }
 
     const articleRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/articles?id=eq.${articleId}&select=*`,
+      `${SUPABASE_URL}/rest/v1/articles?id=eq.${articleId}&select=*,article_contributors(name)`,
       { headers: supabaseHeaders }
     )
     const articles = await articleRes.json()
@@ -98,9 +100,16 @@ export default async function handler(req, res) {
       })
     }
 
+    // Apply GE publish-time transformations:
+    // - Convert <a> tags to [su_ge-cta type="link" ...] shortcodes
+    // - Prepend [su_ge-article-contributors position="top" ...]
+    // - Append bottom contributor block with Sources list + share icons
+    // - Use focus_keyword (slugified) as the WP slug
+    const transformed = transformContentForPublish(article)
+
     const postData = {
       title: article.title,
-      content: article.content,
+      content: transformed.content,
       excerpt: article.excerpt || '',
       status: connection.default_post_status || 'draft',
       meta: {
@@ -108,6 +117,10 @@ export default async function handler(req, res) {
         _yoast_wpseo_metadesc: article.meta_description || article.excerpt,
         _yoast_wpseo_focuskw: article.focus_keyword || '',
       },
+    }
+
+    if (transformed.slug) {
+      postData.slug = transformed.slug
     }
 
     if (connection.default_category_id) {
