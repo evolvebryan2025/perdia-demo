@@ -154,6 +154,73 @@ export function buildShareIconsShortcode() {
 }
 
 /**
+ * GetEducated WordPress CMS taxonomy + page IDs (resolved from
+ * https://www.geteducated.com/wp-json/wp/v2/categories and /pages on 2026-04-28).
+ * Hardcoded because the IDs are stable across stage and prod and rarely change.
+ */
+export const WP_CATEGORY_IDS = {
+  uncategorized: 1,
+  articles: 4,
+  'ranking-reports': 5,
+  'popular-posts': 7,
+  careers: 8,
+  'career-center': 9,
+  'college-choices': 10,
+  'college-savings': 11,
+  'education-guides': 12,
+}
+
+export const WP_PARENT_PAGE_IDS = {
+  'top-online-colleges': 26704,
+  careers: 26156,
+}
+
+/**
+ * Pick the secondary WP category for an article based on title + focus keyword.
+ * Per the Disruptors shortcode doc, every article gets the "Articles" category
+ * PLUS one more relevant category. Returns the additional category ID, or null
+ * if no specific match (in which case only "Articles" is sent).
+ *
+ * @param {Object} article
+ * @returns {number|null}
+ */
+export function pickSecondaryCategoryId(article) {
+  const text = `${article.title || ''} ${article.focus_keyword || ''}`.toLowerCase()
+
+  if (/\b(best|top|cheapest|most affordable|ranking|rankings)\b/.test(text)) {
+    return WP_CATEGORY_IDS['ranking-reports']
+  }
+  if (/\b(career|careers|job|jobs|salary|employment|profession)\b/.test(text)) {
+    return WP_CATEGORY_IDS['career-center']
+  }
+  if (/\b(cost|savings|tuition|cheap|affordab|financial aid|scholarship)\b/.test(text)) {
+    return WP_CATEGORY_IDS['college-savings']
+  }
+  if (/\bvs\b|\bversus\b|\bcompar/.test(text)) {
+    return WP_CATEGORY_IDS['college-choices']
+  }
+  if (/\b(what is|what are|guide|overview|introduction|how to|how do)\b/.test(text)) {
+    return WP_CATEGORY_IDS['education-guides']
+  }
+  return null
+}
+
+/**
+ * Pick the WP parent page ID for an article. Per the doc, only two options
+ * should be used: "Top Online Colleges" (default) or "Careers" (career-focused).
+ *
+ * @param {Object} article
+ * @returns {number}
+ */
+export function pickParentPageId(article) {
+  const text = `${article.title || ''} ${article.focus_keyword || ''}`.toLowerCase()
+  if (/\b(career|careers|job|jobs|salary|employment|profession)\b/.test(text)) {
+    return WP_PARENT_PAGE_IDS.careers
+  }
+  return WP_PARENT_PAGE_IDS['top-online-colleges']
+}
+
+/**
  * Apply all GE publish-time transformations and return ready-to-POST values.
  *
  * Idempotent: if the content already starts with a position="top" contributor

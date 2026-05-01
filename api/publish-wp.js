@@ -1,4 +1,9 @@
-import { transformContentForPublish } from '../src/services/wpContentTransform.js'
+import {
+  transformContentForPublish,
+  pickSecondaryCategoryId,
+  pickParentPageId,
+  WP_CATEGORY_IDS,
+} from '../src/services/wpContentTransform.js'
 
 export const config = {
   runtime: 'nodejs',
@@ -107,24 +112,53 @@ export default async function handler(req, res) {
     // - Use focus_keyword (slugified) as the WP slug
     const transformed = transformContentForPublish(article)
 
+    // Per the Disruptors shortcode doc: every article gets the "Articles" category
+    // plus one more content-type-specific category, and a parent page (Top Online
+    // Colleges or Careers) so the URL inherits the parent slug.
+    const secondaryCategoryId = pickSecondaryCategoryId(article)
+    const categoryIds = [WP_CATEGORY_IDS.articles]
+    if (secondaryCategoryId && secondaryCategoryId !== WP_CATEGORY_IDS.articles) {
+      categoryIds.push(secondaryCategoryId)
+    }
+
+    const metaTitle = article.meta_title || article.title || ''
+    const metaDescription = article.meta_description || article.excerpt || ''
+
     const postData = {
       title: article.title,
       content: transformed.content,
       excerpt: article.excerpt || '',
       status: connection.default_post_status || 'draft',
+      categories: categoryIds,
+      parent: pickParentPageId(article),
       meta: {
-        _yoast_wpseo_title: article.meta_title || article.title,
-        _yoast_wpseo_metadesc: article.meta_description || article.excerpt,
+        // Yoast SEO core
+        _yoast_wpseo_title: metaTitle,
+        _yoast_wpseo_metadesc: metaDescription,
         _yoast_wpseo_focuskw: article.focus_keyword || '',
+
+        // Yoast OpenGraph (social card on FB/LinkedIn)
+        '_yoast_wpseo_opengraph-title': metaTitle,
+        '_yoast_wpseo_opengraph-description': metaDescription,
+
+        // Yoast Twitter card
+        '_yoast_wpseo_twitter-title': metaTitle,
+        '_yoast_wpseo_twitter-description': metaDescription,
+
+        // Yoast schema typing — articles render as Article on a WebPage
+        _yoast_wpseo_schema_page_type: 'WebPage',
+        _yoast_wpseo_schema_article_type: 'Article',
+
+        // Perdia tracking — lets WP admins identify which Perdia article
+        // produced this WP page and the QA score it shipped with.
+        _perdia_article_id: String(article.id || ''),
+        _perdia_quality_score: article.quality_score ?? 0,
+        _perdia_generated_at: article.created_at || new Date().toISOString(),
       },
     }
 
     if (transformed.slug) {
       postData.slug = transformed.slug
-    }
-
-    if (connection.default_category_id) {
-      postData.categories = [connection.default_category_id]
     }
 
     const credentials = Buffer.from(`${connection.username}:${connection.password}`).toString('base64')
