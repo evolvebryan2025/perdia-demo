@@ -1591,12 +1591,17 @@ CRITICAL: Actually make the changes. OUTPUT ONLY THE COMPLETE FIXED HTML. No exp
       //   getClientSchoolBoost() in subjectMatcher can prioritize sponsored/priority pages.
       // - Restrict to www.geteducated.com so internal-link suggestions never point
       //   at staging URLs, even if a stage row sneaks back into the catalog.
+      // - Only suggest articles older than 1 year (per Josh 2026-05-03): evergreen
+      //   content that's had time to settle into search rankings.
+      const oneYearAgo = new Date()
+      oneYearAgo.setDate(oneYearAgo.getDate() - 365)
       const { data: geArticles, error: geError } = await supabase
         .from('geteducated_articles')
         .select('id, url, title, excerpt, topics, content_type, degree_level, subject_area, times_linked_to, is_sponsored, school_priority, sitemap_priority')
         .not('content_text', 'is', null) // Only enriched articles
         .eq('is_active', true)
         .like('url', 'https://www.geteducated.com/%')
+        .lt('published_at', oneYearAgo.toISOString())
         .limit(limit * 3) // Fetch more to allow for filtering
 
       if (geError) {

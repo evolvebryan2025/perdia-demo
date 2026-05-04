@@ -564,6 +564,18 @@ export function useGetEducatedFilterOptions() {
  * @param {boolean} options.revisedOnly - Filter to only show revised articles (version_count > 1)
  * @param {boolean} options.revisedFirst - Sort revised articles to top (default: true for 'all' view)
  */
+// Articles older than this many days are considered "old enough" to be linked
+// to per Josh's confirmation (2026-05-03): the catalog only surfaces evergreen
+// content that has had time to settle into search rankings. New articles are
+// hidden until they age past the cutoff.
+const CATALOG_MIN_AGE_DAYS = 365
+
+function olderThanCutoffIso() {
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - CATALOG_MIN_AGE_DAYS)
+  return cutoff.toISOString()
+}
+
 export function useGetEducatedArticlesPaginated(options = {}) {
   const { user } = useAuth()
   const {
@@ -592,6 +604,9 @@ export function useGetEducatedArticlesPaginated(options = {}) {
 
       // Exclude non-article content types
       query = query.in('content_type', ARTICLE_CONTENT_TYPES)
+
+      // Only show articles older than the configured cutoff (default 1 year)
+      query = query.lt('published_at', olderThanCutoffIso())
 
       // Sort revised articles first when not filtering to revised-only
       // version_count DESC puts revised articles (version_count > 1) at top
