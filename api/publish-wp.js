@@ -105,12 +105,36 @@ export default async function handler(req, res) {
       })
     }
 
+    // Pre-fetch the school slug → WordPress CPT ID map so /online-schools/<slug>/
+    // links in article content can be rewritten to the school-card shortcode
+    // variant: [su_ge-cta type="link" school="<id>"]. Only schools with a
+    // wordpress_id populated (from Tony's spreadsheet) are returned; everything
+    // else falls back to the url-based shortcode at transform time.
+    const schoolIdBySlug = {}
+    try {
+      const schoolsRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/geteducated_schools?wordpress_id=not.is.null&select=slug,wordpress_id`,
+        { headers: supabaseHeaders }
+      )
+      if (schoolsRes.ok) {
+        const rows = await schoolsRes.json()
+        for (const row of rows) {
+          if (row.slug && typeof row.wordpress_id === 'number') {
+            schoolIdBySlug[row.slug.toLowerCase()] = row.wordpress_id
+          }
+        }
+      }
+    } catch (_err) {
+      // Non-fatal: missing map just means school links use url-based shortcodes.
+    }
+
     // Apply GE publish-time transformations:
     // - Convert <a> tags to [su_ge-cta type="link" ...] shortcodes
+    //   (school CPT links use school="<id>" when the slug map has the ID)
     // - Prepend [su_ge-article-contributors position="top" ...]
     // - Append bottom contributor block with Sources list + share icons
     // - Use focus_keyword (slugified) as the WP slug
-    const transformed = transformContentForPublish(article)
+    const transformed = transformContentForPublish(article, { schoolIdBySlug })
 
     // Per the Disruptors shortcode doc: every article gets the "Articles" category
     // plus one more content-type-specific category, and a parent page (Top Online

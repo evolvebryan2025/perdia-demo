@@ -78,18 +78,46 @@ function normalizeInternalUrl(url) {
 }
 
 /**
+ * If the URL is a /online-schools/<slug>/ page and the slug is in the
+ * schoolIdBySlug map, return the WordPress school CPT ID. Used to emit the
+ * monetized school-card variant of [su_ge-cta] instead of a plain URL link.
+ *
+ * Per Tony (2026-05-04): /online-schools/<slug> URLs MUST become
+ * `school="<id>"` shortcodes so WordPress renders them as school cards.
+ *
+ * @param {string} url - URL or path
+ * @param {Record<string, number>} [schoolIdBySlug] - slug → WP CPT ID map
+ * @returns {number|null} School CPT ID, or null if no match
+ */
+function lookupSchoolId(url, schoolIdBySlug) {
+  if (!schoolIdBySlug || !url) return null
+  const path = normalizeInternalUrl(url)
+  const match = path.match(/^\/online-schools\/([a-z0-9-]+)\/?$/i)
+  if (!match) return null
+  const slug = match[1].toLowerCase()
+  const id = schoolIdBySlug[slug]
+  return typeof id === 'number' && id > 0 ? id : null
+}
+
+/**
  * Convert every <a href="..."> tag in HTML to a [su_ge-cta type="link"] shortcode.
- * Internal links use the relative path; external links carry target="blank".
+ * - Internal /online-schools/<slug>/ links emit `school="<id>"` when the slug is
+ *   present in schoolIdBySlug; otherwise fall back to the url-based variant.
+ * - Other internal links use the relative path; external links carry target="blank".
  *
  * Anchor text may contain inline HTML (e.g. <strong>); we preserve it as the
  * inner text but use a plain-text version for the cta-copy attribute (which
  * cannot contain markup).
  *
  * Existing [su_ge-cta] shortcodes already in the content are left untouched.
+ *
+ * @param {string} html
+ * @param {{ schoolIdBySlug?: Record<string, number> }} [options]
  */
-export function convertLinksToShortcodes(html) {
+export function convertLinksToShortcodes(html, options = {}) {
   if (!html) return html
 
+  const { schoolIdBySlug } = options
   const linkRegex = /<a\s+([^>]*?)href=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/a>/gi
 
   return html.replace(linkRegex, (match, _attrsBefore, url, _attrsAfter, anchorText) => {
@@ -99,6 +127,10 @@ export function convertLinksToShortcodes(html) {
     if (!ctaCopy) return match
 
     if (isInternalUrl(url)) {
+      const schoolId = lookupSchoolId(url, schoolIdBySlug)
+      if (schoolId) {
+        return `[su_ge-cta type="link" cta-copy="${ctaCopy}" school="${schoolId}"]${innerText}[/su_ge-cta]`
+      }
       const internalUrl = normalizeInternalUrl(url)
       return `[su_ge-cta type="link" cta-copy="${ctaCopy}" url="${internalUrl}"]${innerText}[/su_ge-cta]`
     }
@@ -233,13 +265,14 @@ export function pickParentPageId(article) {
  * @param {string} [article.focus_keyword] - SEO focus keyword (used as slug)
  * @param {string} [article.title] - Fallback for slug when focus_keyword missing
  * @param {string} [article.slug] - Pre-set slug (overrides focus_keyword)
+ * @param {{ schoolIdBySlug?: Record<string, number> }} [options]
  * @returns {{ content: string, slug: string, authorSlug: string|null, sources: string[] }}
  */
-export function transformContentForPublish(article) {
+export function transformContentForPublish(article, options = {}) {
   const authorName = article.contributor_name || article.article_contributors?.name || ''
   const authorSlug = getContributorSlug(authorName)
 
-  let content = convertLinksToShortcodes(article.content || '')
+  let content = convertLinksToShortcodes(article.content || '', { schoolIdBySlug: options.schoolIdBySlug })
 
   const sources = extractExternalSources(article.content || '')
 

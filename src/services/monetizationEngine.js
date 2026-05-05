@@ -456,21 +456,23 @@ export class MonetizationEngine {
     }
 
     // GE Picks shortcode (correct GetEducated format)
-    // Build the CTA URL from category/concentration/level
-    let ctaUrl = '/online-degrees/'
-    if (degreeLevelCode) {
-      // Map level code to slug (this is approximate - may need adjustment)
-      const levelSlugs = {
-        1: 'associate',
-        2: 'bachelor',
-        3: 'bachelor', // bachelor completion
-        4: 'master',
-        5: 'doctorate',
-        6: 'certificate',
-      }
-      const levelSlug = levelSlugs[degreeLevelCode] || ''
-      if (levelSlug) ctaUrl += `${levelSlug}/`
+    // Build the CTA URL from category/concentration/level. Per Tony's feedback
+    // (2026-05-04 Slack via Josh), the URL must always include the level
+    // segment — when no specific degree level is matched for an article, use
+    // "all" as the level slug so the resulting URL stays valid on geteducated.com:
+    //   correct:   /online-degrees/all/business/marketing/
+    //   incorrect: /online-degrees/business/marketing/
+    const levelSlugs = {
+      1: 'associate',
+      2: 'bachelor',
+      3: 'bachelor', // bachelor completion
+      4: 'master',
+      5: 'doctorate',
+      6: 'certificate',
     }
+    const levelSlug = levelSlugs[degreeLevelCode] || 'all'
+    let ctaUrl = `/online-degrees/${levelSlug}/`
+
     if (category) {
       const categorySlug = category.category?.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || ''
       const concentrationSlug = category.concentration?.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || ''
