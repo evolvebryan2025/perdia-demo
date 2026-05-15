@@ -3,5 +3,11 @@
     { "source": "/api/wp-stage/:path*", "destination": "https://stage.geteducated.com/:path*" },
     { "source": "/api/wp-prod/:path*", "destination": "https://www.geteducated.com/:path*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/sync-geteducated-data",
+      "schedule": "0 6 * * *"
+    }
   ]
 }

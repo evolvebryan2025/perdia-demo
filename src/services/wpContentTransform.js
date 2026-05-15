@@ -21,10 +21,20 @@ const GE_HOST_REGEX = /^https?:\/\/(www\.)?geteducated\.com/i
 /**
  * Maps internal contributor names (as stored in articles.contributor_name) to
  * the WordPress contributor URL slug used by the [su_ge-article-contributors]
- * shortcode. The full last names "Warner" and "Derrow" come from the
- * Disruptors shortcode spec — internally the DB still uses first names only.
+ * shortcode.
+ *
+ * Production GetEducated has all 4 approved authors as contributor pages:
+ *   tony-huffman, kayleigh-gilbert, sara-warner, charity-derrow
+ *
+ * Stage GetEducated only has 10 contributors and is MISSING sara-warner and
+ * charity-derrow (confirmed via article_contributor-sitemap.xml on 2026-05-15).
+ * Publishing to stage with those slugs renders a broken author shortcode in WP.
+ *
+ * Environment-aware fallbacks pick the closest stage-available equivalent so
+ * stage QA still produces a valid author block. Per J Day (2026-05-15): "code
+ * on whatever Article Contributors are at-hand since last sync".
  */
-const AUTHOR_SLUGS = {
+const AUTHOR_SLUGS_PROD = {
   'Tony Huffman': 'tony-huffman',
   'Kayleigh Gilbert': 'kayleigh-gilbert',
   'Sara': 'sara-warner',
@@ -33,13 +43,41 @@ const AUTHOR_SLUGS = {
   'Charity Derrow': 'charity-derrow',
 }
 
+const AUTHOR_SLUGS_STAGE = {
+  'Tony Huffman': 'tony-huffman',
+  'Kayleigh Gilbert': 'kayleigh-gilbert',
+  // Stage substitutes: sara-warner and charity-derrow don't exist on stage.
+  // Sara → Sarah Raines (closest name); Charity → Tony Huffman (no closer match,
+  // and Tony is always present so the shortcode always renders).
+  'Sara': 'sarah-raines',
+  'Charity': 'tony-huffman',
+  'Sara Warner': 'sarah-raines',
+  'Charity Derrow': 'tony-huffman',
+}
+
+/**
+ * Resolve which contributor-slug map to use based on the target WP host.
+ * Defaults to production mapping when host is unknown.
+ *
+ * @param {string} [siteUrl] - The WordPress site URL the article publishes to.
+ * @returns {Record<string, string>}
+ */
+function pickAuthorSlugMap(siteUrl) {
+  if (siteUrl && /stage\.geteducated\.com/i.test(siteUrl)) {
+    return AUTHOR_SLUGS_STAGE
+  }
+  return AUTHOR_SLUGS_PROD
+}
+
 /**
  * @param {string} authorName
+ * @param {{ siteUrl?: string }} [options]
  * @returns {string|null} Contributor slug for the shortcode, or null if unknown.
  */
-export function getContributorSlug(authorName) {
+export function getContributorSlug(authorName, options = {}) {
   if (!authorName) return null
-  return AUTHOR_SLUGS[authorName] || null
+  const map = pickAuthorSlugMap(options.siteUrl)
+  return map[authorName] || null
 }
 
 /**
@@ -164,14 +202,23 @@ export function extractExternalSources(html) {
   return [...sources]
 }
 
-export function buildAuthorTopShortcode(authorName) {
-  const slug = getContributorSlug(authorName)
+/**
+ * @param {string} authorName
+ * @param {{ siteUrl?: string }} [options]
+ */
+export function buildAuthorTopShortcode(authorName, options = {}) {
+  const slug = getContributorSlug(authorName, options)
   if (!slug) return ''
   return `[su_ge-article-contributors position="top" written-by="${slug}" expert-review-by="0" edited-by="0"][/su_ge-article-contributors]`
 }
 
-export function buildAuthorBottomShortcode(authorName, sources = []) {
-  const slug = getContributorSlug(authorName)
+/**
+ * @param {string} authorName
+ * @param {string[]} [sources]
+ * @param {{ siteUrl?: string }} [options]
+ */
+export function buildAuthorBottomShortcode(authorName, sources = [], options = {}) {
+  const slug = getContributorSlug(authorName, options)
   if (!slug) return ''
 
   const sourcesBlock = sources.length > 0
@@ -265,24 +312,25 @@ export function pickParentPageId(article) {
  * @param {string} [article.focus_keyword] - SEO focus keyword (used as slug)
  * @param {string} [article.title] - Fallback for slug when focus_keyword missing
  * @param {string} [article.slug] - Pre-set slug (overrides focus_keyword)
- * @param {{ schoolIdBySlug?: Record<string, number> }} [options]
+ * @param {{ schoolIdBySlug?: Record<string, number>, siteUrl?: string }} [options]
  * @returns {{ content: string, slug: string, authorSlug: string|null, sources: string[] }}
  */
 export function transformContentForPublish(article, options = {}) {
   const authorName = article.contributor_name || article.article_contributors?.name || ''
-  const authorSlug = getContributorSlug(authorName)
+  const slugOpts = { siteUrl: options.siteUrl }
+  const authorSlug = getContributorSlug(authorName, slugOpts)
 
   let content = convertLinksToShortcodes(article.content || '', { schoolIdBySlug: options.schoolIdBySlug })
 
   const sources = extractExternalSources(article.content || '')
 
-  const topShortcode = buildAuthorTopShortcode(authorName)
+  const topShortcode = buildAuthorTopShortcode(authorName, slugOpts)
   const hasTopAlready = /\[su_ge-article-contributors[^\]]*position=["']top["']/i.test(content)
   if (topShortcode && !hasTopAlready) {
     content = `${topShortcode}\n\n${content}`
   }
 
-  const bottomShortcode = buildAuthorBottomShortcode(authorName, sources)
+  const bottomShortcode = buildAuthorBottomShortcode(authorName, sources, slugOpts)
   const hasBottomAlready = /\[su_ge-article-contributors[^\]]*position=["']bottom["']/i.test(content)
   if (bottomShortcode && !hasBottomAlready) {
     content = `${content}\n\n${bottomShortcode}`

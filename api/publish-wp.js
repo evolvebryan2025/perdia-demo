@@ -134,7 +134,10 @@ export default async function handler(req, res) {
     // - Prepend [su_ge-article-contributors position="top" ...]
     // - Append bottom contributor block with Sources list + share icons
     // - Use focus_keyword (slugified) as the WP slug
-    const transformed = transformContentForPublish(article, { schoolIdBySlug })
+    const transformed = transformContentForPublish(article, {
+      schoolIdBySlug,
+      siteUrl: connection.site_url,
+    })
 
     // Per the Disruptors shortcode doc: every article gets the "Articles" category
     // plus one more content-type-specific category, and a parent page (Top Online
@@ -172,6 +175,15 @@ export default async function handler(req, res) {
         // Yoast schema typing — articles render as Article on a WebPage
         _yoast_wpseo_schema_page_type: 'WebPage',
         _yoast_wpseo_schema_article_type: 'Article',
+
+        // Yoast canonical + robots directives (April 14 API contract from J Day).
+        // canonical is left empty so Yoast auto-derives the canonical URL from
+        // the final WP-assigned permalink (we don't know it pre-publish). Both
+        // robots directives default to "0" (indexable, follow links) since these
+        // are production articles meant to rank.
+        _yoast_wpseo_canonical: '',
+        '_yoast_wpseo_meta-robots-noindex': '0',
+        '_yoast_wpseo_meta-robots-nofollow': '0',
 
         // Perdia tracking — lets WP admins identify which Perdia article
         // produced this WP page and the QA score it shipped with.
