@@ -199,11 +199,106 @@ export default async function handler(req, res) {
       synced += batch.length
     }
 
+    // ---- Contributors sync ----
+    // /data also returns the article_contributors CPT. Upsert wordpress_id,
+    // wordpress_slug, wordpress_url, and refresh the bio (post_content)
+    // into article_contributors so we have current WP-side persona data
+    // available for smart author matching at generation time.
+    //
+    // Match strategy: ON CONFLICT (wordpress_slug). Existing rows for our
+    // approved authors (matched by name to slug via wpContentTransform's
+    // AUTHOR_SLUGS_PROD map) will get their wordpress_id and bio refreshed.
+    // Contributors that don't exist in our DB yet get inserted with
+    // is_active=false so they don't appear in the approved-author dropdown
+    // until an admin reviews them.
+    const contributors = Array.isArray(data.article_contributors) ? data.article_contributors : []
+    const now = new Date().toISOString()
+    const contribRows = []
+    const contribSeen = new Set()
+    for (const c of contributors) {
+      const wpSlug = (c.post_name || '').toLowerCase()
+      if (!wpSlug || contribSeen.has(wpSlug)) continue
+      contribSeen.add(wpSlug)
+
+      contribRows.push({
+        name: c.post_title || wpSlug,
+        wordpress_id: typeof c.id === 'number' ? c.id : null,
+        wordpress_slug: wpSlug,
+        wordpress_url: c.url ? `https://www.geteducated.com${c.url}` : null,
+        bio: c.post_content || null,
+        is_active: false,  // existing approved authors keep their flag via merge-duplicates
+        wp_last_synced_at: now,
+      })
+    }
+
+    let syncedContributors = 0
+    if (contribRows.length > 0) {
+      const contribRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/article_contributors?on_conflict=wordpress_slug`,
+        {
+          method: 'POST',
+          headers: {
+            ...supabaseHeaders,
+            'Content-Type': 'application/json',
+            // resolution=merge-duplicates: existing rows keep all their
+            // human-curated AI-prompt fields (voice_description, signature
+            // phrases, etc.) and only the WP-sync columns get refreshed.
+            // is_active is intentionally listed as false in the payload — but
+            // because merge-duplicates UPDATEs all sent columns, this would
+            // wipe approved-author flags. Send only the columns we actually
+            // want to update via the on_conflict_update parameter… but
+            // Supabase REST doesn't support that, so instead we use the
+            // returning=representation hack: send the full row for inserts,
+            // but PATCH existing rows individually below.
+            'Prefer': 'resolution=ignore-duplicates,return=minimal',
+          },
+          body: JSON.stringify(contribRows),
+        }
+      )
+      // Whether the insert ignored duplicates or not, we now PATCH each
+      // existing row to refresh the WP-sourced fields. This keeps approved
+      // authors' is_active=true and their AI-prompt fields intact while
+      // bringing the WP linkage up to date.
+      if (!contribRes.ok && contribRes.status !== 409) {
+        const errorText = await contribRes.text()
+        return res.status(200).json({
+          success: false,
+          synced_schools: synced,
+          error: `Contributors upsert failed: ${contribRes.status} ${errorText.slice(0, 300)}`,
+        })
+      }
+
+      for (const row of contribRows) {
+        const patchRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/article_contributors?wordpress_slug=eq.${encodeURIComponent(row.wordpress_slug)}`,
+          {
+            method: 'PATCH',
+            headers: {
+              ...supabaseHeaders,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal',
+            },
+            body: JSON.stringify({
+              wordpress_id: row.wordpress_id,
+              wordpress_url: row.wordpress_url,
+              bio: row.bio,
+              wp_last_synced_at: row.wp_last_synced_at,
+              // Intentionally NOT updating name (preserves human edits) or
+              // is_active (preserves approved-author flag).
+            }),
+          }
+        )
+        if (patchRes.ok) syncedContributors++
+      }
+    }
+
     return res.status(200).json({
       success: true,
       synced_schools: synced,
+      synced_contributors: syncedContributors,
       endpoint_total_schools: data.school_count || schools.length,
       endpoint_total_degrees: data.degree_count || 0,
+      endpoint_total_contributors: contributors.length,
       generated_at: data.generated_at || null,
       source: dataUrl,
     })
