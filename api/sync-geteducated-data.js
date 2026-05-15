@@ -134,19 +134,38 @@ export default async function handler(req, res) {
       })
     }
 
-    // Build upsert rows. Skip schools where the post_name (slug) is missing
-    // since slug is the upsert key on the geteducated_schools side.
+    // The /data response mixes top-level school pages (which is what we want)
+    // with per-school degree pages and BERP browse pages. Only top-level pages
+    // — those whose URL is exactly /online-schools/<slug>/ with no further
+    // segments — have unique slugs and represent actual schools. Filter the
+    // rest out so the Supabase upsert doesn't fail on duplicate ON CONFLICT
+    // keys (e.g. 11 different schools each have a degree page with
+    // post_name="mba", which would collide if we tried to upsert them all).
+    const TOP_LEVEL_SCHOOL_URL = /^\/online-schools\/([a-z0-9-]+)\/?$/i
+    const seen = new Set()
     const rows = []
     for (const s of schools) {
-      const slug = (s.post_name || makeSlug(s.post_title || '')).toLowerCase()
-      if (!slug) continue
+      const url = (s.url || '').toString()
+      const match = url.match(TOP_LEVEL_SCHOOL_URL)
+      if (!match) continue
+
+      const slug = (s.post_name || match[1] || '').toLowerCase()
+      if (!slug || seen.has(slug)) continue
+      seen.add(slug)
+
       rows.push({
         name: s.post_title || slug,
         slug,
-        url: s.url
-          ? `https://www.geteducated.com${s.url}`
-          : `https://www.geteducated.com/online-schools/${slug}/`,
+        url: `https://www.geteducated.com${url}`,
         wordpress_id: typeof s.id === 'number' ? s.id : null,
+      })
+    }
+
+    if (rows.length === 0) {
+      return res.status(200).json({
+        success: false,
+        error: 'No top-level school pages found in /data response',
+        endpoint_total_entries: schools.length,
       })
     }
 
