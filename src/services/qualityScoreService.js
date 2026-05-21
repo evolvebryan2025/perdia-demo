@@ -30,6 +30,7 @@ const DEFAULT_THRESHOLDS = {
   minExternalLinks: 1,
   requireHeadings: true,
   minHeadingCount: 3,
+  minFaqCount: 3,
 }
 
 // Cache for system settings
@@ -65,14 +66,18 @@ export async function getQualityThresholds() {
       settingsMap[row.key] = row.value
     })
 
-    // Simplified thresholds - only what GetEducated cares about
+    // Simplified thresholds - only what GetEducated cares about.
+    // Accept both legacy key names (target_word_count_min/max) and the
+    // canonical names (min_word_count/max_word_count) so seeded settings
+    // are honoured regardless of which migration produced them.
     const thresholds = {
-      minWordCount: parseInt(settingsMap.min_word_count) || DEFAULT_THRESHOLDS.minWordCount,
-      maxWordCount: parseInt(settingsMap.max_word_count) || DEFAULT_THRESHOLDS.maxWordCount,
+      minWordCount: parseInt(settingsMap.min_word_count || settingsMap.target_word_count_min) || DEFAULT_THRESHOLDS.minWordCount,
+      maxWordCount: parseInt(settingsMap.max_word_count || settingsMap.target_word_count_max) || DEFAULT_THRESHOLDS.maxWordCount,
       minInternalLinks: parseInt(settingsMap.min_internal_links) || DEFAULT_THRESHOLDS.minInternalLinks,
       minExternalLinks: parseInt(settingsMap.min_external_links) || DEFAULT_THRESHOLDS.minExternalLinks,
       requireHeadings: settingsMap.require_headings !== 'false',
       minHeadingCount: parseInt(settingsMap.min_heading_count) || DEFAULT_THRESHOLDS.minHeadingCount,
+      minFaqCount: parseInt(settingsMap.min_faq_count) || DEFAULT_THRESHOLDS.minFaqCount,
     }
 
     // Update cache
@@ -312,6 +317,21 @@ export function calculateQualityScore(content, article = {}, thresholds = DEFAUL
       value: hasAuthor ? 'Assigned' : 'Missing',
       issue: !hasAuthor ? 'Assign an author/contributor' : null
     },
+    faqCount: (() => {
+      // xlsx spec rows 10–12: minimum 3 FAQs. v2 had removed the FAQ
+      // check; restored here per the May 19 review.
+      const faqs = Array.isArray(article?.faqs) ? article.faqs : []
+      const passes = faqs.length >= t.minFaqCount
+      return {
+        type: 'insufficient_faqs',
+        passed: passes,
+        critical: false,
+        enabled: true,
+        label: `At least ${t.minFaqCount} FAQs`,
+        value: `${faqs.length} FAQ${faqs.length !== 1 ? 's' : ''}`,
+        issue: passes ? null : `Add ${t.minFaqCount - faqs.length} more FAQ item(s)`,
+      }
+    })(),
     triplicates: {
       type: 'triplicates',
       passed: triplicateResult.count < 10,
@@ -353,6 +373,37 @@ export function calculateQualityScore(content, article = {}, thresholds = DEFAUL
         ? `Suspicious salary figure(s): ${costSalaryValidation.suspiciousSalaries.map(s => s.display).join('; ')}. Verify against BLS data.`
         : null
     },
+    accreditationLanguage: (() => {
+      // Tony's May 19 review: "Some certifications and some employers may
+      // prefer..." is too weak. Flag hedge phrases when the article
+      // discusses accreditation so the editor can strengthen them.
+      const text = plainText.toLowerCase()
+      const mentionsAccreditation = /accredit/.test(text)
+      const weakPatterns = [
+        /some\s+(?:certifications?|employers?|programs?)\s+(?:may|might|could)\s+prefer/i,
+        /could\s+be\s+beneficial/i,
+        /it'?s\s+(?:often|sometimes)\s+considered/i,
+        /it'?s\s+a\s+good\s+idea\s+to\s+check/i,
+      ]
+      const offenders = weakPatterns.filter((re) => re.test(plainText))
+      const hasWeak = mentionsAccreditation && offenders.length > 0
+      return {
+        type: 'weak_accreditation_language',
+        passed: !hasWeak,
+        critical: false,
+        enabled: true,
+        severity: 'warning',
+        label: 'Strong, direct accreditation language',
+        value: !mentionsAccreditation
+          ? 'No accreditation mention'
+          : hasWeak
+            ? `${offenders.length} weak phrase(s) found`
+            : 'Strong language',
+        issue: hasWeak
+          ? 'Accreditation is discussed with hedge phrases ("may prefer", "could be beneficial"). Rewrite with concrete consequences (federal aid eligibility, transfer credit, licensure) and cite ed.gov/CHEA.'
+          : null,
+      }
+    })(),
   }
 
   // Filter to enabled checks only

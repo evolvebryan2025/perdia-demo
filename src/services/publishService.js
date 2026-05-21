@@ -16,6 +16,7 @@ import { supabase } from './supabaseClient'
 import { validateForPublish, validateForPublishAsync } from './validation/prePublishValidation'
 import { AUTHOR_DISPLAY_NAMES } from '../hooks/useContributors'
 import WordPressClient, { WORDPRESS_CONTRIBUTOR_IDS } from './wordpressClient'
+import { buildCategoriesForArticle } from '../lib/wpCategories'
 
 // Webhook endpoints for n8n WordPress publishing
 // Use environment variables with fallback to development URL
@@ -376,6 +377,8 @@ export function buildWebhookPayload(article, status = 'draft', environment = DEF
   const wordpressContributorId = article.article_contributors?.wordpress_contributor_id || null
   const contributorPageUrl = article.article_contributors?.contributor_page_url || null
 
+  const categoryInfo = buildCategoriesForArticle(article)
+
   return {
     // Article identification
     article_id: article.id,
@@ -402,6 +405,14 @@ export function buildWebhookPayload(article, status = 'draft', environment = DEF
     meta_description: article.meta_description || article.excerpt,
     focus_keyword: article.focus_keyword,
     slug: article.slug || generateSlug(article.title),
+
+    // WordPress categories. Primary "articles" is always present; the
+    // secondary slug is matched from the article topic. Tony's May 19
+    // review flagged that only "articles" was being assigned.
+    // Webhook receiver / WP plugin resolves slugs -> term IDs.
+    categories: categoryInfo.slugs,
+    category_slugs: categoryInfo.slugs,
+    secondary_category: categoryInfo.secondary,
 
     // Structured data
     faqs: article.faqs || [],

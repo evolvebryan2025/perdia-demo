@@ -325,6 +325,69 @@ export async function getCostDataContext(idea) {
   }
 }
 
+/**
+ * Find the best-match ranking reports for an article topic + degree levels.
+ *
+ * Tony's May 19 review: a cybersecurity article should link to
+ * `bachelors-in-cyber-security-online` and `online-masters-cybersecurity`
+ * ranking reports — not generic ones. Returns at most one report per
+ * requested degree level, scored by token overlap between the topic and
+ * the report's `field_of_study` / `report_title`.
+ *
+ * @param {string} topic - Article topic/title.
+ * @param {Array<string>} degreeLevelNames - e.g. ["Bachelor's", "Master's"].
+ *        If empty, returns the single best match overall.
+ * @returns {Promise<Array<{report_title, report_url, degree_level, field_of_study, score}>>}
+ */
+export async function findRelevantRankingReports(topic, degreeLevelNames = []) {
+  if (!topic) return []
+
+  const { data: reports, error } = await supabase
+    .from('ranking_reports')
+    .select('id, report_title, report_url, degree_level, field_of_study')
+
+  if (error || !reports?.length) return []
+
+  const topicTokens = extractKeywords(topic)
+  if (!topicTokens.length) return []
+
+  const scoreReport = (report) => {
+    const haystack = `${report.report_title || ''} ${report.field_of_study || ''}`.toLowerCase()
+    let score = 0
+    for (const token of topicTokens) {
+      if (haystack.includes(token)) score += 10
+    }
+    // Exact field_of_study contained in topic is the strongest signal
+    if (report.field_of_study && topic.toLowerCase().includes(report.field_of_study.toLowerCase())) {
+      score += 25
+    }
+    return score
+  }
+
+  const scored = reports
+    .map((r) => ({ ...r, score: scoreReport(r) }))
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+
+  if (degreeLevelNames.length === 0) {
+    return scored.slice(0, 1)
+  }
+
+  // One report per requested degree level
+  const picked = []
+  const seen = new Set()
+  for (const wantedLevel of degreeLevelNames) {
+    const match = scored.find(
+      (r) => !seen.has(r.id) && r.degree_level?.toLowerCase().includes(wantedLevel.toLowerCase())
+    )
+    if (match) {
+      picked.push(match)
+      seen.add(match.id)
+    }
+  }
+  return picked
+}
+
 export default {
   searchCostData,
   getCostBySchool,
@@ -332,4 +395,5 @@ export default {
   getTopAffordable,
   formatCostDataForPrompt,
   getCostDataContext,
+  findRelevantRankingReports,
 }

@@ -12,7 +12,8 @@
 
 import { validateContent, canPublish as checkLinkPublish } from './linkValidator'
 import { assessRisk, checkAutoPublishEligibility } from './riskAssessment'
-import { APPROVED_AUTHORS } from '../../hooks/useContributors'
+import { APPROVED_AUTHORS, validateByline } from '../../hooks/useContributors'
+import { monetizationValidator } from '../monetizationEngine'
 import {
   extractShortcodes,
   validateShortcodeParams,
@@ -66,28 +67,27 @@ export function validateForPublish(article, options = {}) {
   const result = createValidationResult()
   result.qualityScore = article.quality_score || 0
 
-  // 1. Author Validation
+  // 1. Author Validation — uses the shared validateByline so blocked
+  // aliases ("Kif", "Julia", etc.) get a clear "internal alias" error
+  // instead of the generic "not approved" message.
   if (enforceApprovedAuthors) {
     const authorName = article.contributor_name || article.article_contributors?.name
-    const isApproved = APPROVED_AUTHORS.includes(authorName)
+    const bylineCheck = validateByline(authorName)
 
-    if (!authorName) {
-      result.checks.author.passed = false
-      result.checks.author.message = 'No author assigned'
-      result.blockingIssues.push({
-        type: 'no_author',
-        message: 'Article must have an assigned author before publishing',
-      })
-    } else if (!isApproved) {
-      result.checks.author.passed = false
-      result.checks.author.message = `"${authorName}" is not an approved author`
-      result.blockingIssues.push({
-        type: 'unauthorized_author',
-        message: `Author "${authorName}" is not approved. Only Tony Huffman, Kayleigh Gilbert, Sara, and Charity are allowed.`,
-      })
-    } else {
+    if (bylineCheck.valid) {
       result.checks.author.passed = true
       result.checks.author.message = `${authorName} (approved)`
+    } else {
+      result.checks.author.passed = false
+      result.checks.author.message = bylineCheck.error
+      result.blockingIssues.push({
+        type: !authorName
+          ? 'no_author'
+          : /internal alias/i.test(bylineCheck.error)
+            ? 'blocked_byline'
+            : 'unauthorized_author',
+        message: bylineCheck.error,
+      })
     }
   } else {
     result.checks.author.passed = true
@@ -95,6 +95,8 @@ export function validateForPublish(article, options = {}) {
   }
 
   // 2. Link Compliance Validation
+  // Per xlsx spec rows 1, 5 and the May 19 review: minimum link counts
+  // (≥3 internal, ≥1 external) are now blocking, not warnings.
   if (checkLinks && article.content) {
     const linkValidation = validateContent(article.content)
     const linkPublishCheck = checkLinkPublish(linkValidation)
@@ -110,6 +112,22 @@ export function validateForPublish(article, options = {}) {
     } else {
       result.checks.links.passed = true
       result.checks.links.message = `${linkValidation.internalLinks} internal, ${linkValidation.externalLinks} external`
+    }
+
+    // Promoted from warning -> blocking per xlsx requirement
+    if (linkValidation.internalLinks < 3) {
+      result.checks.links.passed = false
+      result.blockingIssues.push({
+        type: 'insufficient_internal_links',
+        message: `Article has ${linkValidation.internalLinks} internal link(s) to GetEducated.com — minimum is 3.`,
+      })
+    }
+    if (linkValidation.externalLinks < 1) {
+      result.checks.links.passed = false
+      result.blockingIssues.push({
+        type: 'missing_external_citation',
+        message: 'Article has no external citations — at least one BLS / government / nonprofit source is required.',
+      })
     }
 
     // Add link warnings
@@ -157,32 +175,48 @@ export function validateForPublish(article, options = {}) {
   }
 
   // 5. Content Requirements
+  // Allow callers to inject pre-fetched system_settings thresholds so this
+  // function stays synchronous. validateForPublishAsync wires this for you.
+  const minWordCount = options.thresholds?.minWordCount ?? 1500
+  const minFaqCount = options.thresholds?.minFaqCount ?? 3
+
   const contentIssues = []
+  const blockingContentIssues = []
 
-  // Check word count
   const wordCount = article.content?.replace(/<[^>]*>/g, '').split(/\s+/).length || 0
-  if (wordCount < 1500) {
-    contentIssues.push('Word count below 1500')
+  if (wordCount < minWordCount) {
+    contentIssues.push(`Word count below ${minWordCount}`)
   }
 
-  // Check FAQs
+  // FAQ minimum — promoted from warning to blocking per xlsx spec rows 10–12.
   const faqs = article.faqs || []
-  if (faqs.length < 3) {
-    contentIssues.push('Fewer than 3 FAQ items')
+  if (faqs.length < minFaqCount) {
+    blockingContentIssues.push({
+      type: 'insufficient_faqs',
+      message: `Article has ${faqs.length} FAQ(s) — minimum is ${minFaqCount}.`,
+    })
   }
 
-  // Check headings
+  // Check headings (stays as a non-blocking warning — xlsx marks the
+  // -10 penalty as scoring-only, not publish-blocking)
   const h2Count = (article.content?.match(/<h2/gi) || []).length
   if (h2Count < 3) {
     contentIssues.push('Fewer than 3 H2 headings')
   }
 
-  if (contentIssues.length === 0) {
+  if (blockingContentIssues.length > 0) {
+    result.blockingIssues.push(...blockingContentIssues)
+  }
+
+  if (contentIssues.length === 0 && blockingContentIssues.length === 0) {
     result.checks.content.passed = true
     result.checks.content.message = 'All content requirements met'
   } else {
     result.checks.content.passed = false
-    result.checks.content.message = contentIssues.join(', ')
+    result.checks.content.message = [
+      ...blockingContentIssues.map((i) => i.message),
+      ...contentIssues,
+    ].join(', ')
     contentIssues.forEach(issue => {
       result.warnings.push({
         type: 'content_issue',
@@ -481,8 +515,59 @@ export function canAutoPublish(article, settings = {}) {
  * @returns {Promise<Object>} Complete validation result with database-validated shortcodes
  */
 export async function validateForPublishAsync(article, options = {}) {
+  // Pre-fetch quality thresholds from system_settings so word-count and
+  // FAQ-count checks honour the configured values instead of falling back
+  // to hardcoded 1500 / 3. Cached in qualityScoreService.
+  let thresholds = options.thresholds
+  if (!thresholds) {
+    try {
+      const { getQualityThresholds } = await import('../qualityScoreService')
+      thresholds = await getQualityThresholds()
+    } catch {
+      thresholds = undefined
+    }
+  }
+
   // Start with sync validation
-  const result = validateForPublish(article, options)
+  const result = validateForPublish(article, { ...options, thresholds })
+
+  // Run the standalone MonetizationValidator (link destinations, cost-data
+  // attribution, sponsored-program priority). Previously isolated — wired
+  // into the publish flow so its blocking/warning output reaches the editor.
+  if (article.content) {
+    try {
+      const mv = await monetizationValidator.validate(
+        article.monetization_output || {},
+        article.content
+      )
+      const dedupKey = (x) => `${x.type || x.rule}|${x.message}`
+      const seen = new Set(result.blockingIssues.map(dedupKey))
+      const seenWarn = new Set(result.warnings.map(dedupKey))
+      for (const b of mv.blockingIssues || []) {
+        const k = dedupKey({ type: b.rule, message: b.message })
+        if (!seen.has(k)) {
+          result.blockingIssues.push({
+            type: b.rule || 'monetization_rule',
+            message: b.message,
+          })
+          seen.add(k)
+        }
+      }
+      for (const w of mv.warnings || []) {
+        const k = dedupKey({ type: w.rule, message: w.message })
+        if (!seenWarn.has(k)) {
+          result.warnings.push({
+            type: w.rule || 'monetization_warning',
+            message: w.message,
+            severity: w.severity,
+          })
+          seenWarn.add(k)
+        }
+      }
+    } catch (mvErr) {
+      console.warn('[Validation] MonetizationValidator failed:', mvErr?.message)
+    }
+  }
 
   // If we have content and shortcodes, do async database validation
   if (article.content) {

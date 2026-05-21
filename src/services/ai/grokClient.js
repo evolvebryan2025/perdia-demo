@@ -493,7 +493,7 @@ BANNED PHRASES AND PATTERNS (never use these):
 WITHOUT proper HTML formatting, articles display as unreadable text walls.
 
 REQUIRED HTML STRUCTURE:
-1. <h2> tags for major section headings
+1. <h2> tags for major section headings — use BETWEEN 3 AND 8 H2 headings. Do NOT exceed 8.
 2. <h3> tags for subsections
 3. <p> tags wrapping EVERY paragraph of text (3-5 sentences max per paragraph)
 4. <ul> and <li> tags for bulleted lists
@@ -524,6 +524,31 @@ Online degrees have transformed higher education accessibility. More students th
 ^^^ THIS IS WRONG - No paragraph breaks, just a wall of text.
 
 === END HTML FORMATTING RULES ===
+
+=== ACCREDITATION LANGUAGE RULES (MANDATORY) ===
+
+When you discuss accreditation, it must be definitive, not hedged. Do NOT write:
+"Some certifications and some employers may prefer a candidate from an accredited program."
+
+Instead, write with authority and concrete consequences:
+- "Accreditation is required for federal financial aid eligibility (FAFSA, Pell Grants, federal loans)."
+- "Students who graduate from non-accredited programs cannot transfer credits to most regional institutions."
+- "Most state licensure boards (nursing, teaching, engineering, social work) only accept degrees from accredited programs."
+- "Employers in regulated industries (healthcare, education, law) routinely disqualify candidates from unaccredited programs."
+
+REQUIRED when an article mentions accreditation:
+1. Cite at least one authoritative source by name: U.S. Department of Education (ed.gov), CHEA (chea.org), or the relevant specialized accreditor (e.g., CCNE for nursing, ABET for engineering, AACSB for business).
+2. Mention specific consequences of attending an unaccredited program: loss of federal aid, non-transferable credits, ineligibility for licensure / state board exams, employer rejection.
+3. Use direct verbs: "requires", "ensures", "guarantees", "prevents" — NOT "may", "might", "some".
+
+BANNED WEAK PHRASES:
+- "some certifications may prefer"
+- "some employers may prefer"
+- "could be beneficial"
+- "is often considered"
+- "it's a good idea to check"
+
+=== END ACCREDITATION RULES ===
 
 FORMAT YOUR RESPONSE AS JSON:
 {

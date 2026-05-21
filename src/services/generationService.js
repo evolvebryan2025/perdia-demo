@@ -11,7 +11,7 @@ import ClaudeClient from './ai/claudeClient.edge'
 import StealthGptClient from './ai/stealthGptClient'
 import { supabase } from './supabaseClient'
 import IdeaDiscoveryService from './ideaDiscoveryService'
-import { getCostDataContext } from './costDataService'
+import { getCostDataContext, findRelevantRankingReports } from './costDataService'
 import { findCheapestClientSchools, formatCheapestSchoolsForPrompt, CLIENT_SCHOOLS } from '../config/clientSchools'
 import { insertShortcodeInContent } from './shortcodeService'
 import { MonetizationEngine, monetizationValidator } from './monetizationEngine'
@@ -26,6 +26,7 @@ import { contentValidator, validateDraft, validateForPublish, validateIdeaAlignm
 import { calculateQualityScore, getQualityThresholds, calculateQualityScoreAsync } from './qualityScoreService'
 import { detectSubjectArea, scoreArticlesForLinking, selectDiverseLinks, normalizeUrl } from './subjectMatcher'
 import { extractLinks as extractLinksFromContent } from './validation/linkValidator'
+import { buildFaqHtml, hasFaqSection } from '../lib/faqHtml'
 
 class GenerationService {
   constructor() {
@@ -802,20 +803,60 @@ EXAMPLES OF WHAT NEVER TO DO:
           if (monetizationMatch.matched) {
             console.log(`[Generation] Matched monetization: category=${monetizationMatch.categoryId}, concentration=${monetizationMatch.concentrationId}, confidence=${monetizationMatch.confidence}`)
 
+            // Tony's May 19 review: a Nursing article was assigned the
+            // Business Administration category. matchTopicToCategory now
+            // enforces a MIN_MATCH_SCORE floor, but low-confidence matches
+            // (score 25–40) still get through. Surface those so an editor
+            // can verify before publish instead of shipping a wrong CTA.
+            if (monetizationMatch.confidence === 'low') {
+              this.logReasoningWarning(
+                'low_confidence_category_match',
+                `Topic "${idea.title || draftData.title}" matched "${monetizationMatch.category?.category}/${monetizationMatch.category?.concentration}" with low confidence (score: ${monetizationMatch.score}). Verify this is the right category before publishing.`,
+                'high'
+              )
+            }
+
             // Determine article type for slot configuration
             const articleType = options.contentType || 'default'
+
+            // Detect distinct degree levels mentioned in the article body so
+            // multiple GE Picks blocks can target different levels (Tony's
+            // May 19 review feedback — one bachelor block, one master block,
+            // etc., gives users broader school exposure).
+            const detectedLevels = this.monetizationEngine.detectDegreeLevelsInContent(finalContent)
+            const fallbackLevel = monetizationMatch.degreeLevelCode
+            const levelsForSlots = detectedLevels.length > 1
+              ? detectedLevels
+              : fallbackLevel
+                ? [fallbackLevel]
+                : detectedLevels
 
             // Generate full monetization with program selection
             monetizationResult = await this.monetizationEngine.generateMonetization({
               articleId: idea.id,
               categoryId: monetizationMatch.categoryId,
               concentrationId: monetizationMatch.concentrationId,
-              degreeLevelCode: monetizationMatch.degreeLevelCode,
+              degreeLevelCode: fallbackLevel,
+              degreeLevelCodes: levelsForSlots.length > 1 ? levelsForSlots : undefined,
               articleType,
             })
 
             if (monetizationResult.success && monetizationResult.slots.length > 0) {
               console.log(`[Generation] Generated ${monetizationResult.slots.length} monetization slots with ${monetizationResult.totalProgramsSelected} programs`)
+
+              // xlsx spec row 26: warn when none of the selected programs
+              // are sponsored / paid-client schools — the article is being
+              // generated for a topic with no monetization potential.
+              const anySponsored = monetizationResult.slots.some(
+                (s) => s.hasSponsored || s.selectedPrograms?.some((p) => p.isSponsored)
+              )
+              if (!anySponsored) {
+                this.logReasoningWarning(
+                  'no_sponsored_schools',
+                  `Monetization category ${monetizationMatch.category?.category}/${monetizationMatch.category?.concentration} has no sponsored or paid-client schools attached. Article is generated but not monetizable — verify before publishing.`,
+                  'medium'
+                )
+              }
 
               // Insert shortcodes at their designated positions
               for (const slot of monetizationResult.slots) {
@@ -829,6 +870,50 @@ EXAMPLES OF WHAT NEVER TO DO:
 
                 finalContent = insertShortcodeInContent(finalContent, slot.shortcode, insertPosition)
                 console.log(`[Generation] Inserted ${slot.type} shortcode at ${slot.name} (${slot.programCount} programs, sponsored: ${slot.hasSponsored})`)
+              }
+
+              // Tony's May 19 review: paragraphs mentioning bachelor/master
+              // degree paths had no internal link to the matching cat/conc/level
+              // URL. Wrap the first mention of each level in a [su_ge-cta] link.
+              const beforeAutoLink = finalContent
+              finalContent = this.monetizationEngine.autoLinkDegreeMentions(
+                finalContent,
+                monetizationMatch.category
+              )
+              if (finalContent !== beforeAutoLink) {
+                this.logReasoning('degree_mention_links', {
+                  reasoning: `Wrapped first mention of each degree level in [su_ge-cta] internal link to /online-degrees/{level}/${monetizationMatch.category?.category}/${monetizationMatch.category?.concentration}/.`,
+                })
+              }
+
+              // Tony's May 19 review: Ranking Report links were missing /
+              // weren't best-match. Pick one report per degree level the
+              // article actually covers, wrapped in [su_ge-cta] shortcodes.
+              try {
+                const levelNameMap = { 1: 'Associate', 2: "Bachelor's", 4: "Master's", 5: 'Doctorate', 6: 'Certificate' }
+                const levelNames = (levelsForSlots.length > 1 ? levelsForSlots : [fallbackLevel])
+                  .filter(Boolean)
+                  .map((code) => levelNameMap[code])
+                  .filter(Boolean)
+                const reports = await findRelevantRankingReports(
+                  idea.title || draftData.title,
+                  levelNames
+                )
+                if (reports.length > 0) {
+                  const ctaBlocks = reports.map((r) => {
+                    const url = r.report_url || ''
+                    const copy = `See top ${r.degree_level || ''} ${r.field_of_study || 'programs'}`.replace(/\s+/g, ' ').trim()
+                    return `<p>[su_ge-cta type="link" cta-copy="${copy}" url="${url}"]${copy}[/su_ge-cta]</p>`
+                  }).join('\n')
+                  const block = `\n<h3>Related Ranking Reports</h3>\n${ctaBlocks}\n`
+                  finalContent = insertShortcodeInContent(finalContent, block, 'pre_conclusion')
+                  this.logReasoning('ranking_report_links', {
+                    inserted: reports.map((r) => ({ url: r.report_url, level: r.degree_level, score: r.score })),
+                    reasoning: `Inserted ${reports.length} best-match ranking report link(s) for levels ${levelNames.join(', ')}.`,
+                  })
+                }
+              } catch (rrErr) {
+                console.warn('[Generation] Ranking report lookup failed:', rrErr?.message)
               }
             } else {
               console.warn('[Generation] Monetization generation returned no slots')
@@ -875,6 +960,15 @@ EXAMPLES OF WHAT NEVER TO DO:
       }
 
       this.updateProgress(onProgress, 'Running content validation...', 68)
+
+      // Append the canonical <h2>Frequently Asked Questions</h2> block built
+      // from Grok's faqs array (xlsx spec rows 10–12). Grok returns FAQs as
+      // structured JSON; without this step they exist on the article record
+      // but never appear in the rendered body.
+      if (draftData.faqs?.length && !hasFaqSection(finalContent)) {
+        const faqBlock = buildFaqHtml(draftData.faqs)
+        if (faqBlock) finalContent = `${finalContent}\n${faqBlock}`
+      }
 
       // VALIDATION CHECKPOINT 2: Full validation before quality scoring
       const preQAValidation = await validateForPublish(finalContent, {
@@ -1084,9 +1178,10 @@ EXAMPLES OF WHAT NEVER TO DO:
       switch (issue.type) {
         case 'word_count_low': {
           const currentWords = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(w => w.length > 0).length
-          const wordsNeeded = Math.max(1200 - currentWords, 300)
+          // xlsx spec row 4: hard automation minimum is 2000-3000 words.
+          const wordsNeeded = Math.max(2000 - currentWords, 300)
           return `=== FIX: WORD COUNT TOO LOW ===
-Current: ~${currentWords} words. Target: 1200-2000 words. ADD at least ${wordsNeeded} more words.
+Current: ~${currentWords} words. Target: 2000-3000 words (HARD minimum per spec). ADD at least ${wordsNeeded} more words.
 - Expand the introduction with 1-2 more context sentences
 - Add a new paragraph to at least 2 existing sections with deeper analysis
 - Expand the conclusion with actionable next steps
@@ -1095,7 +1190,7 @@ DO NOT add filler. Every sentence must provide genuine value.`
         case 'word_count_high': {
           const currentWords2 = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(w => w.length > 0).length
           return `=== FIX: WORD COUNT TOO HIGH ===
-Current: ~${currentWords2} words. Target: 1200-2000 words.
+Current: ~${currentWords2} words. Target: 2000-2500 words (hard cap 2500 per spec).
 - Remove redundant sentences, condense wordy phrases
 - DO NOT remove factual data, cost info, or key recommendations.`
         }

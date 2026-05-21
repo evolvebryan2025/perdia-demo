@@ -10,6 +10,8 @@ import { TableRow } from '@tiptap/extension-table-row'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { useEffect, useCallback } from 'react'
+import { SuGePicks, SuGeCta, SuGeQdf } from '@/lib/tiptap-extensions/shortcodeNodes'
+import { shortcodesToHtml, htmlToShortcodes, stripShortcodesForCount } from '@/lib/shortcodeRenderer'
 import {
   Bold,
   Italic,
@@ -281,6 +283,24 @@ export function RichTextEditor({
         HTMLAttributes: {
           class: 'text-blue-600 underline hover:text-blue-800',
         },
+      }).extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            'data-shortcode': {
+              default: null,
+              parseHTML: (el) => el.getAttribute('data-shortcode'),
+              renderHTML: (attrs) =>
+                attrs['data-shortcode'] ? { 'data-shortcode': attrs['data-shortcode'] } : {},
+            },
+            'data-attrs': {
+              default: null,
+              parseHTML: (el) => el.getAttribute('data-attrs'),
+              renderHTML: (attrs) =>
+                attrs['data-attrs'] ? { 'data-attrs': attrs['data-attrs'] } : {},
+            },
+          }
+        },
       }),
       Image.configure({
         HTMLAttributes: {
@@ -315,11 +335,14 @@ export function RichTextEditor({
           class: 'border border-gray-300 px-3 py-2',
         },
       }),
+      SuGePicks,
+      SuGeCta,
+      SuGeQdf,
     ],
-    content: value,
+    content: shortcodesToHtml(value),
     editable,
     onUpdate: ({ editor }) => {
-      const html = editor.getHTML()
+      const html = htmlToShortcodes(editor.getHTML())
       onChange?.(html)
     },
     editorProps: {
@@ -345,8 +368,10 @@ export function RichTextEditor({
 
   // Update content when value prop changes externally
   useEffect(() => {
-    if (editor && value !== editor.getHTML()) {
-      editor.commands.setContent(value, false)
+    if (!editor) return
+    const incoming = shortcodesToHtml(value)
+    if (incoming !== editor.getHTML()) {
+      editor.commands.setContent(incoming, false)
     }
   }, [value, editor])
 
@@ -370,7 +395,8 @@ export function RichTextEditor({
  */
 export function getPlainText(html) {
   if (!html) return ''
-  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  const stripped = stripShortcodesForCount(html)
+  return stripped.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 /**

@@ -289,7 +289,36 @@ export function validateContent(content) {
     }
   }
 
+  // xlsx spec row 22: no raw affiliate URLs — all monetization must use
+  // shortcodes. Detect bare anchor hrefs containing affiliate-tracking
+  // query params or path segments and emit as blocking.
+  const rawAffiliateMatches = findRawAffiliateUrls(content)
+  for (const match of rawAffiliateMatches) {
+    results.isCompliant = false
+    results.blockingIssues.push({
+      url: match.url,
+      anchorText: match.anchorText,
+      issues: ['Raw affiliate URL — must be wrapped in a [su_ge-cta] or [su_ge-picks] shortcode'],
+    })
+  }
+
   return results
+}
+
+/**
+ * Find anchor tags pointing at affiliate-style URLs (commission, affiliate,
+ * tracking, click, ref=, aff=, partner=) that aren't on geteducated.com.
+ * Returns [{url, anchorText}].
+ */
+export function findRawAffiliateUrls(content) {
+  if (!content) return []
+  const re = /<a\b[^>]*\bhref="(https?:\/\/(?!(?:www\.|stage\.)?geteducated\.com)[^"]*(?:commission|affiliate|tracking|click|\bref=|\baff=|\bpartner=)[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
+  const matches = []
+  let m
+  while ((m = re.exec(content)) !== null) {
+    matches.push({ url: m[1], anchorText: m[2].replace(/<[^>]*>/g, '').trim() })
+  }
+  return matches
 }
 
 /**

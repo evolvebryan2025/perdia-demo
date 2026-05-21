@@ -266,7 +266,7 @@ REQUIREMENTS:
 WITHOUT proper HTML formatting, articles display as unreadable text walls.
 
 REQUIRED HTML STRUCTURE:
-1. <h2> tags for major section headings
+1. <h2> tags for major section headings — use BETWEEN 3 AND 8 H2 headings. Do NOT exceed 8.
 2. <h3> tags for subsections
 3. <p> tags wrapping EVERY paragraph of text (3-5 sentences max per paragraph)
 4. <ul> and <li> tags for bulleted lists
@@ -336,7 +336,8 @@ Social workers have the potential to change lives at every level of society. If 
 4. CONTENT FOCUS:
    - All content must be relevant to ONLINE students
    - Emphasize affordability, flexibility, and career outcomes
-   - Discuss accreditation requirements where relevant
+   - Discuss accreditation requirements where relevant — use DEFINITIVE language ("required for federal aid", "credits do not transfer", "ineligible for licensure"), NEVER hedge phrases like "some employers may prefer"
+   - When discussing accreditation, cite at least one authoritative source by name (U.S. Department of Education, CHEA, CCNE, ABET, AACSB) and spell out concrete consequences of attending an unaccredited program: loss of federal aid (FAFSA, Pell, federal loans), non-transferable credits, ineligibility for state board exams / licensure, employer rejection
    - Help readers make informed decisions about their education
 
 5. STRUCTURE REQUIREMENTS:

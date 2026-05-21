@@ -216,23 +216,19 @@ function extractDegreeLevelFromContent(article) {
  * Build CTA URL from match result
  */
 function buildCtaUrlFromMatch(match) {
-  let url = '/online-degrees/'
-
-  // Add level slug
-  if (match.degreeLevelCode) {
-    const levelSlugs = {
-      1: 'associate',
-      2: 'bachelor',
-      3: 'bachelor',
-      4: 'master',
-      5: 'doctorate',
-      6: 'certificate',
-    }
-    const levelSlug = levelSlugs[match.degreeLevelCode]
-    if (levelSlug) url += `${levelSlug}/`
+  // Live GetEducated URL pattern: /online-degrees/{level OR all}/{category}/{concentration}/
+  // The level segment is REQUIRED — when no specific level applies, use "all".
+  const levelSlugs = {
+    1: 'associate',
+    2: 'bachelor',
+    3: 'bachelor',
+    4: 'master',
+    5: 'doctorate',
+    6: 'certificate',
   }
+  const levelSlug = (match.degreeLevelCode && levelSlugs[match.degreeLevelCode]) || 'all'
+  let url = `/online-degrees/${levelSlug}/`
 
-  // Add category/concentration slugs
   if (match.category) {
     const categorySlug = match.category.category?.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || ''
     const concentrationSlug = match.category.concentration?.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || ''

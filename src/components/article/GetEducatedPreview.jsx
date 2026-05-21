@@ -1,5 +1,6 @@
 import { forwardRef } from 'react'
 import { format } from 'date-fns'
+import { shortcodesToHtml } from '@/lib/shortcodeRenderer'
 
 /**
  * GetEducated WordPress Theme Preview
@@ -18,7 +19,8 @@ const GetEducatedPreview = forwardRef(function GetEducatedPreview(
   { article, highlightedContent, onMarkClick },
   ref
 ) {
-  const content = highlightedContent || article?.content || ''
+  const rawContent = highlightedContent || article?.content || ''
+  const content = shortcodesToHtml(rawContent)
 
   return (
     <div className="geteducated-preview bg-white">
