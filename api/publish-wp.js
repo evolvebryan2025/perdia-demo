@@ -128,15 +128,35 @@ export default async function handler(req, res) {
       // Non-fatal: missing map just means school links use url-based shortcodes.
     }
 
+    // Pull the include_research_block flag from system_settings. Per Tony's
+    // May 19 review the bottom "How we researched..." block defaults to OFF;
+    // can be re-enabled by setting the row to 'true'.
+    let includeBottomBlock = false
+    try {
+      const settingRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/system_settings?key=eq.include_research_block&select=value`,
+        { headers: supabaseHeaders }
+      )
+      if (settingRes.ok) {
+        const rows = await settingRes.json()
+        if (Array.isArray(rows) && rows[0]?.value === 'true') {
+          includeBottomBlock = true
+        }
+      }
+    } catch (_err) {
+      // Non-fatal: default stays OFF (Tony's preference).
+    }
+
     // Apply GE publish-time transformations:
     // - Convert <a> tags to [su_ge-cta type="link" ...] shortcodes
     //   (school CPT links use school="<id>" when the slug map has the ID)
     // - Prepend [su_ge-article-contributors position="top" ...]
-    // - Append bottom contributor block with Sources list + share icons
+    // - Optionally append bottom contributor block with Sources list
     // - Use focus_keyword (slugified) as the WP slug
     const transformed = transformContentForPublish(article, {
       schoolIdBySlug,
       siteUrl: connection.site_url,
+      includeBottomBlock,
     })
 
     // Per the Disruptors shortcode doc: every article gets the "Articles" category

@@ -330,10 +330,16 @@ export function transformContentForPublish(article, options = {}) {
     content = `${topShortcode}\n\n${content}`
   }
 
-  const bottomShortcode = buildAuthorBottomShortcode(authorName, sources, slugOpts)
-  const hasBottomAlready = /\[su_ge-article-contributors[^\]]*position=["']bottom["']/i.test(content)
-  if (bottomShortcode && !hasBottomAlready) {
-    content = `${content}\n\n${bottomShortcode}`
+  // Tony's May 19 review explicitly flagged the bottom "How we researched and
+  // created this article" block as removable. Now gated by an opt-in flag so
+  // it's stripped by default but can be restored via system_settings without
+  // a code change.
+  if (options.includeBottomBlock) {
+    const bottomShortcode = buildAuthorBottomShortcode(authorName, sources, slugOpts)
+    const hasBottomAlready = /\[su_ge-article-contributors[^\]]*position=["']bottom["']/i.test(content)
+    if (bottomShortcode && !hasBottomAlready) {
+      content = `${content}\n\n${bottomShortcode}`
+    }
   }
 
   const hasShareAlready = /\[su_ge-article-share-icons/i.test(content)
