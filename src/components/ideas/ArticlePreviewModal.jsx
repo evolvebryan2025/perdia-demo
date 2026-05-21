@@ -19,6 +19,7 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import { supabase } from '../../services/supabaseClient'
+import { shortcodesToHtml } from '../../lib/shortcodeRenderer'
 
 /**
  * ArticlePreviewModal
@@ -333,7 +334,7 @@ export default function ArticlePreviewModal({
                         prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline
                         prose-ul:my-4 prose-li:my-1
                         prose-strong:text-gray-900"
-                      dangerouslySetInnerHTML={{ __html: article.content }}
+                      dangerouslySetInnerHTML={{ __html: shortcodesToHtml(article.content) }}
                     />
                   </div>
                 )}

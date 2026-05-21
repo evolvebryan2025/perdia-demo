@@ -33,6 +33,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { shortcodesToHtml } from '@/lib/shortcodeRenderer'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -686,7 +687,7 @@ function VersionCard({
             <div
               className="prose prose-sm max-w-none max-h-64 overflow-y-auto p-3 bg-white rounded-lg text-sm border"
               dangerouslySetInnerHTML={{
-                __html: version.content_html?.substring(0, 5000) || '<p>No content</p>'
+                __html: shortcodesToHtml(version.content_html?.substring(0, 5000) || '<p>No content</p>')
               }}
             />
           </motion.div>

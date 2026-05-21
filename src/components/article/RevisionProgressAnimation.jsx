@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { shortcodesToHtml } from '@/lib/shortcodeRenderer'
 
 // Severity colors for feedback display
 const SEVERITY_COLORS = {
@@ -328,7 +329,7 @@ function TypingReveal({ htmlContent, onComplete, speed = 'normal' }) {
             clipPath: `inset(0 0 ${100 - revealProgress}% 0)`,
             WebkitClipPath: `inset(0 0 ${100 - revealProgress}% 0)`,
           }}
-          dangerouslySetInnerHTML={{ __html: htmlContent }}
+          dangerouslySetInnerHTML={{ __html: shortcodesToHtml(htmlContent) }}
         />
 
         {/* Typing cursor line */}
@@ -368,7 +369,7 @@ function ArticlePreview({ content, dimmed = false, title = 'Article' }) {
       <ScrollArea className="flex-1">
         <div
           className="p-6 article-content prose prose-lg max-w-none"
-          dangerouslySetInnerHTML={{ __html: content }}
+          dangerouslySetInnerHTML={{ __html: shortcodesToHtml(content) }}
         />
       </ScrollArea>
     </div>
@@ -621,7 +622,7 @@ export default function RevisionProgressAnimation({
                     <ScrollArea className="h-full">
                       <div
                         className="p-6 article-content prose prose-lg max-w-none"
-                        dangerouslySetInnerHTML={{ __html: revisedContent }}
+                        dangerouslySetInnerHTML={{ __html: shortcodesToHtml(revisedContent) }}
                       />
                     </ScrollArea>
                   )}

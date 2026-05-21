@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { diffWords } from 'diff'
+import { shortcodesToHtml } from '@/lib/shortcodeRenderer'
 
 // Revision strategy info for display
 const STRATEGY_INFO = {
@@ -299,7 +300,7 @@ function TypingReveal({ htmlContent, onComplete, speed = 'normal' }) {
             clipPath: `inset(0 0 ${100 - revealProgress}% 0)`,
             WebkitClipPath: `inset(0 0 ${100 - revealProgress}% 0)`,
           }}
-          dangerouslySetInnerHTML={{ __html: htmlContent }}
+          dangerouslySetInnerHTML={{ __html: shortcodesToHtml(htmlContent) }}
         />
 
         {!isComplete && (
@@ -410,7 +411,7 @@ function ArticlePreview({ content, title, dimmed = false }) {
       <ScrollArea className="flex-1">
         <div
           className="p-6 prose prose-sm max-w-none"
-          dangerouslySetInnerHTML={{ __html: content || '<p>No content</p>' }}
+          dangerouslySetInnerHTML={{ __html: shortcodesToHtml(content) || '<p>No content</p>' }}
         />
       </ScrollArea>
     </div>
@@ -609,7 +610,7 @@ export default function CatalogRevisionAnimation({
                     <ScrollArea className="h-full">
                       <div
                         className="p-6 prose prose-sm max-w-none"
-                        dangerouslySetInnerHTML={{ __html: revisedContent }}
+                        dangerouslySetInnerHTML={{ __html: shortcodesToHtml(revisedContent) }}
                       />
                     </ScrollArea>
                   )}
