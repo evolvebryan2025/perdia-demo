@@ -58,6 +58,7 @@ export const ARTICLE_CONTENT_TYPES = [
  */
 export function useGetEducatedArticles(filters = {}) {
   const { user } = useAuth()
+  const sort = filters.sort || { column: 'updated_at', direction: 'desc' }
 
   return useQuery({
     queryKey: ['geteducated-articles', filters],
@@ -66,7 +67,7 @@ export function useGetEducatedArticles(filters = {}) {
         .from('geteducated_articles')
         .select('*')
         .in('content_type', ARTICLE_CONTENT_TYPES)
-        .order('updated_at', { ascending: false })
+        .order(sort.column, { ascending: sort.direction === 'asc' })
 
       // Apply filters
       if (filters.contentType) {

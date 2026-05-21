@@ -8,14 +8,17 @@ import { calculateQualityScore, calculateQualityScoreAsync, getQualityThresholds
  */
 export function useArticles(filters = {}) {
   const { user } = useAuth()
+  const sort = filters.sort || { column: 'created_at', direction: 'desc' }
 
   return useQuery({
+    // sort is part of the key so React Query refetches when the user
+    // changes the dropdown selection.
     queryKey: ['articles', filters],
     queryFn: async () => {
       let query = supabase
         .from('articles')
         .select('*, article_contributors(*)')
-        .order('created_at', { ascending: false })
+        .order(sort.column, { ascending: sort.direction === 'asc' })
 
       // Apply filters
       if (filters.status) {

@@ -55,6 +55,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Badge } from '../components/ui/badge'
 import { useErrorModal } from '../components/ui/ErrorModal'
 import ArticlePreviewModal from '../components/ideas/ArticlePreviewModal'
+import { SortDropdown } from '../components/ui/sort-dropdown'
+import { NewBadge } from '../components/ui/new-badge'
+import { CONTENT_SORT_OPTIONS, resolveSort } from '../lib/sortOptions'
+import { useStoredState } from '../lib/useStoredState'
 
 const STATUS_CONFIG = {
   pending: { label: 'Pending', color: 'bg-yellow-100 text-yellow-700', icon: FileText },
@@ -90,7 +94,11 @@ function ContentIdeas() {
   // Error modal for structured error display
   const { showError, errorModal } = useErrorModal()
 
-  const { data: ideas = [], isLoading } = useContentIdeas({ status: filterStatus })
+  // Persisted sort preference. Default: newest first.
+  const [sortKey, setSortKey] = useStoredState('perdia:sort:ideas', 'newest')
+  const sort = resolveSort(CONTENT_SORT_OPTIONS, sortKey)
+
+  const { data: ideas = [], isLoading } = useContentIdeas({ status: filterStatus, sort })
   const createIdea = useCreateContentIdea()
   const updateIdea = useUpdateContentIdea()
   const deleteIdeaWithReason = useDeleteContentIdeaWithReason()
@@ -534,8 +542,8 @@ function ContentIdeas() {
         </TabsList>
 
         <TabsContent value="ideas" className="mt-0">
-          {/* Filters */}
-          <div className="flex flex-wrap gap-2 mb-4">
+          {/* Filters + Sort */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
             <button
               onClick={() => setFilterStatus(null)}
               className={`px-4 py-2 rounded-lg ${
@@ -559,6 +567,13 @@ function ContentIdeas() {
                 {config.label}
               </button>
             ))}
+            <div className="ml-auto">
+              <SortDropdown
+                value={sortKey}
+                onChange={setSortKey}
+                options={CONTENT_SORT_OPTIONS}
+              />
+            </div>
           </div>
 
           {/* Monetization Filters */}
@@ -810,7 +825,8 @@ function IdeaCard({ idea, onApprove, onReject, onDelete, onGenerate, onQuickFeed
     <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition-shadow">
       {/* Header: Status Badge + Monetization + Quick Feedback + Delete */}
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <NewBadge timestamp={idea.created_at} />
           <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusConfig.color}`}>
             {statusConfig.label}
           </span>

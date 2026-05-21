@@ -27,6 +27,10 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { SortDropdown } from '@/components/ui/sort-dropdown'
+import { NewBadge } from '@/components/ui/new-badge'
+import { CATALOG_SORT_OPTIONS, resolveSort } from '@/lib/sortOptions'
+import { useStoredState } from '@/lib/useStoredState'
 import {
   Select,
   SelectContent,
@@ -112,9 +116,17 @@ export default function SiteCatalog() {
   // File input ref for CSV import
   const fileInputRef = useRef(null)
 
+  // Persisted sort for both tabs. Custom catalog defaults to Title A→Z
+  // (matches prior behaviour); GetEducated catalog stays on updated_at desc.
+  const [customSortKey, setCustomSortKey] = useStoredState('perdia:sort:catalog:custom', 'title-asc')
+  const customSort = resolveSort(CATALOG_SORT_OPTIONS, customSortKey)
+  const [geSortKey, setGeSortKey] = useStoredState('perdia:sort:catalog:ge', 'newest')
+  const geSort = resolveSort(CATALOG_SORT_OPTIONS, geSortKey)
+
   // Hooks - Legacy site_articles
   const { data: articles = [], isLoading } = useSiteArticles({
     search: searchQuery || undefined,
+    sort: customSort,
   })
   const stats = useSiteArticleStats()
   const { data: clusters = [] } = useClusters()
@@ -129,6 +141,8 @@ export default function SiteCatalog() {
     contentType: contentTypeFilter,
     degreeLevel: degreeLevelFilter,
     revisedOnly: geSubTab === 'revised',
+    sortBy: geSort.column === 'created_at' ? 'updated_at' : geSort.column,
+    sortAsc: geSort.direction === 'asc',
   })
 
   // Extract pagination data
@@ -558,6 +572,12 @@ export default function SiteCatalog() {
                       ))}
                     </SelectContent>
                   </Select>
+
+                  <SortDropdown
+                    value={geSortKey}
+                    onChange={(k) => { setGeSortKey(k); setCurrentPage(1); }}
+                    options={CATALOG_SORT_OPTIONS}
+                  />
                 </>
               )}
 
@@ -588,6 +608,12 @@ export default function SiteCatalog() {
                       <SelectItem value="inactive">Inactive</SelectItem>
                     </SelectContent>
                   </Select>
+
+                  <SortDropdown
+                    value={customSortKey}
+                    onChange={setCustomSortKey}
+                    options={CATALOG_SORT_OPTIONS}
+                  />
 
                   {/* Actions - Only for custom catalog */}
                   <div className="flex gap-2">
@@ -668,8 +694,9 @@ export default function SiteCatalog() {
                                   <BookOpen className="w-5 h-5 text-blue-600" />
                                 </div>
                                 <div className="min-w-0">
-                                  <span className="font-medium text-gray-900 hover:text-blue-600 line-clamp-1 flex items-center gap-1">
+                                  <span className="font-medium text-gray-900 hover:text-blue-600 line-clamp-1 flex items-center gap-2 flex-wrap">
                                     {article.title}
+                                    <NewBadge timestamp={article.created_at} />
                                   </span>
                                   <p className="text-sm text-gray-500 line-clamp-1">{article.slug}</p>
                                 </div>
@@ -789,15 +816,18 @@ export default function SiteCatalog() {
                                 <FileText className="w-5 h-5 text-gray-500" />
                               </div>
                               <div className="min-w-0">
-                                <a
-                                  href={article.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="font-medium text-gray-900 hover:text-blue-600 line-clamp-1 flex items-center gap-1"
-                                >
-                                  {article.title}
-                                  <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                                </a>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <a
+                                    href={article.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-medium text-gray-900 hover:text-blue-600 line-clamp-1 flex items-center gap-1"
+                                  >
+                                    {article.title}
+                                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                                  </a>
+                                  <NewBadge timestamp={article.created_at} />
+                                </div>
                                 <p className="text-sm text-gray-500 line-clamp-1">{article.url}</p>
                               </div>
                             </div>

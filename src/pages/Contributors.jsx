@@ -22,6 +22,10 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { SortDropdown } from '@/components/ui/sort-dropdown'
+import { NewBadge } from '@/components/ui/new-badge'
+import { PERSON_SORT_OPTIONS, resolveSort } from '@/lib/sortOptions'
+import { useStoredState } from '@/lib/useStoredState'
 import {
   Dialog,
   DialogContent,
@@ -93,9 +97,14 @@ export default function Contributors() {
     },
   })
 
+  // Persisted sort. Default: name A→Z (matches prior behaviour).
+  const [sortKey, setSortKey] = useStoredState('perdia:sort:contributors', 'name-asc')
+  const sort = resolveSort(PERSON_SORT_OPTIONS, sortKey)
+
   // Hooks
   const { data: contributors = [], isLoading } = useContributors({
     search: searchQuery || undefined,
+    sort,
   })
   const stats = useContributorStats()
   const { data: articles = [] } = useArticles()
@@ -319,7 +328,7 @@ export default function Contributors() {
                   className="pl-10"
                 />
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <div className="flex bg-gray-100 rounded-lg p-1">
                   <Button
                     variant={filterActive === 'all' ? 'default' : 'ghost'}
@@ -343,6 +352,11 @@ export default function Contributors() {
                     Inactive
                   </Button>
                 </div>
+                <SortDropdown
+                  value={sortKey}
+                  onChange={setSortKey}
+                  options={PERSON_SORT_OPTIONS}
+                />
                 <Button onClick={() => { resetForm(); setIsAddDialogOpen(true) }} className="gap-2">
                   <Plus className="w-4 h-4" />
                   Add Contributor
@@ -430,7 +444,10 @@ export default function Contributors() {
                                     </div>
                                   </div>
                                   <div>
-                                    <h3 className="font-bold text-gray-900 text-lg">{contributor.name}</h3>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h3 className="font-bold text-gray-900 text-lg">{contributor.name}</h3>
+                                      <NewBadge timestamp={contributor.created_at} />
+                                    </div>
                                     {displayName && (
                                       <p className="text-sm text-gray-500">
                                         Writes as <span className="font-medium text-green-700">{displayName}</span>
@@ -562,7 +579,10 @@ export default function Contributors() {
                                     {contributor.name?.charAt(0) || 'C'}
                                   </div>
                                   <div>
-                                    <h3 className="font-bold text-gray-900">{contributor.name}</h3>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h3 className="font-bold text-gray-900">{contributor.name}</h3>
+                                      <NewBadge timestamp={contributor.created_at} />
+                                    </div>
                                     <Badge
                                       variant="outline"
                                       className={contributor.is_active

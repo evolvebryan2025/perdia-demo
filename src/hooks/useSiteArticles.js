@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
  */
 export function useSiteArticles(filters = {}) {
   const { user } = useAuth()
+  const sort = filters.sort || { column: 'title', direction: 'asc' }
 
   return useQuery({
     queryKey: ['site-articles', filters],
@@ -14,7 +15,7 @@ export function useSiteArticles(filters = {}) {
       let query = supabase
         .from('site_articles')
         .select('*')
-        .order('title', { ascending: true })
+        .order(sort.column, { ascending: sort.direction === 'asc' })
 
       // Apply filters
       if (filters.isActive !== undefined) {

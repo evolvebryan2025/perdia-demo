@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
  */
 export function useKeywords(filters = {}) {
   const { user } = useAuth()
+  const sort = filters.sort || { column: 'keyword', direction: 'asc' }
 
   return useQuery({
     queryKey: ['keywords', filters],
@@ -14,7 +15,7 @@ export function useKeywords(filters = {}) {
       let query = supabase
         .from('keywords')
         .select('*, clusters(name)')
-        .order('keyword', { ascending: true })
+        .order(sort.column, { ascending: sort.direction === 'asc' })
 
       if (filters.clusterId) {
         query = query.eq('cluster_id', filters.clusterId)

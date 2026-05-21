@@ -40,6 +40,10 @@ import {
   Loader2
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { SortDropdown } from '@/components/ui/sort-dropdown'
+import { NewBadge } from '@/components/ui/new-badge'
+import { REVIEW_SORT_OPTIONS, resolveSort } from '@/lib/sortOptions'
+import { useStoredState } from '@/lib/useStoredState'
 
 // Status configuration
 const REVIEW_STATUSES = [
@@ -210,16 +214,30 @@ export default function ReviewQueue() {
   const publishArticle = usePublishArticle()
   const [publishingArticleId, setPublishingArticleId] = useState(null)
 
+  // Persisted sort preference. Default keeps the prior behaviour: soonest
+  // deadline first, then newest by created_at.
+  const [sortKey, setSortKey] = useStoredState('perdia:sort:review', 'deadline-asc')
+  const sort = resolveSort(REVIEW_SORT_OPTIONS, sortKey)
+
   // Fetch articles in review statuses (include new GetEducated fields)
   const { data: articles = [], isLoading, refetch } = useQuery({
-    queryKey: ['review-articles', selectedStatus],
+    queryKey: ['review-articles', selectedStatus, sortKey],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('articles')
         .select('*, article_contributors(*)')
         .eq('status', selectedStatus)
-        .order('autopublish_deadline', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: false })
+
+      if (sort.column === 'autopublish_deadline') {
+        // Deadline-first sort keeps the secondary newest tiebreak.
+        q = q
+          .order('autopublish_deadline', { ascending: true, nullsFirst: false })
+          .order('created_at', { ascending: false })
+      } else {
+        q = q.order(sort.column, { ascending: sort.direction === 'asc' })
+      }
+
+      const { data, error } = await q
 
       if (error) throw error
 
@@ -432,6 +450,12 @@ export default function ReviewQueue() {
             />
           </div>
 
+          <SortDropdown
+            value={sortKey}
+            onChange={setSortKey}
+            options={REVIEW_SORT_OPTIONS}
+          />
+
           {/* Status Tabs */}
           <div className="flex gap-2 overflow-x-auto pb-2">
             {REVIEW_STATUSES.map(({ value, label, icon: Icon, color }) => (
@@ -554,6 +578,7 @@ export default function ReviewQueue() {
                         <div className="flex-1 min-w-0">
                           {/* Badges Row */}
                           <div className="flex items-center gap-2 mb-3 flex-wrap">
+                            <NewBadge timestamp={article.created_at} />
                             <Badge
                               variant="outline"
                               className={`${STATUS_COLORS[article.status]} border font-medium`}

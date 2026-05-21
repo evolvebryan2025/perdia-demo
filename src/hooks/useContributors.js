@@ -78,6 +78,7 @@ export const AUTHOR_CONTENT_MAPPING = {
  */
 export function useContributors(filters = {}) {
   const { user } = useAuth()
+  const sort = filters.sort || { column: 'name', direction: 'asc' }
 
   return useQuery({
     queryKey: ['contributors', filters],
@@ -85,7 +86,7 @@ export function useContributors(filters = {}) {
       let query = supabase
         .from('article_contributors')
         .select('*')
-        .order('name', { ascending: true })
+        .order(sort.column, { ascending: sort.direction === 'asc' })
 
       if (filters.search) {
         query = query.or(`name.ilike.%${filters.search}%,bio.ilike.%${filters.search}%`)

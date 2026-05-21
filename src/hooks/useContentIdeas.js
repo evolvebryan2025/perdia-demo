@@ -11,6 +11,7 @@ const grokClient = new GrokClient()
  */
 export function useContentIdeas(filters = {}) {
   const { user } = useAuth()
+  const sort = filters.sort || { column: 'created_at', direction: 'desc' }
 
   return useQuery({
     queryKey: ['content_ideas', filters],
@@ -18,7 +19,7 @@ export function useContentIdeas(filters = {}) {
       let query = supabase
         .from('content_ideas')
         .select('*, clusters(*)')
-        .order('created_at', { ascending: false })
+        .order(sort.column, { ascending: sort.direction === 'asc' })
 
       // Apply filters
       if (filters.status) {

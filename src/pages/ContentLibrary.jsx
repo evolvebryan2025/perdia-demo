@@ -5,6 +5,10 @@ import { useSubmitArticleFeedback, useArticleFeedbackSummary } from '../hooks/us
 import { useDeleteArticleWithReason } from '../hooks/useDeletionLog'
 import { DeleteWithReasonModal } from '../components/ui/DeleteWithReasonModal'
 import { Search, Filter, Loader2, FileText, ThumbsUp, ThumbsDown, Trash2 } from 'lucide-react'
+import { SortDropdown } from '../components/ui/sort-dropdown'
+import { NewBadge } from '../components/ui/new-badge'
+import { CONTENT_SORT_OPTIONS, resolveSort } from '../lib/sortOptions'
+import { useStoredState } from '../lib/useStoredState'
 
 // Small component to display feedback for each article card
 function ArticleFeedback({ articleId }) {
@@ -30,9 +34,13 @@ function ContentLibrary() {
 
   const deleteArticleWithReason = useDeleteArticleWithReason()
 
+  const [sortKey, setSortKey] = useStoredState('perdia:sort:library', 'newest')
+  const sort = resolveSort(CONTENT_SORT_OPTIONS, sortKey)
+
   const { data: articles = [], isLoading } = useArticles({
     search: search || undefined,
     status: statusFilter || undefined,
+    sort,
   })
 
   const handleDeleteWithReason = async (formData) => {
@@ -92,6 +100,12 @@ function ContentLibrary() {
           <option value="ready_to_publish">Ready to Publish</option>
           <option value="published">Published</option>
         </select>
+
+        <SortDropdown
+          value={sortKey}
+          onChange={setSortKey}
+          options={CONTENT_SORT_OPTIONS}
+        />
       </div>
 
       {/* Articles Grid */}
@@ -105,6 +119,7 @@ function ContentLibrary() {
             <div className="flex items-start justify-between mb-3">
               <FileText className="w-5 h-5 text-blue-600" />
               <div className="flex items-center gap-2">
+                <NewBadge timestamp={article.created_at} />
                 {article.quality_score > 0 && (
                   <span className={`px-2 py-1 text-xs rounded ${
                     article.quality_score >= 80 ? 'bg-green-100 text-green-700' :

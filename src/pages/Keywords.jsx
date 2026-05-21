@@ -38,6 +38,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Checkbox } from '@/components/ui/checkbox'
+import { SortDropdown } from '@/components/ui/sort-dropdown'
+import { NewBadge } from '@/components/ui/new-badge'
+import { KEYWORD_SORT_OPTIONS, resolveSort } from '@/lib/sortOptions'
+import { useStoredState } from '@/lib/useStoredState'
 import {
   Select,
   SelectContent,
@@ -719,10 +723,15 @@ function LibraryTab() {
     cluster_id: '',
   })
 
+  // Persisted sort. Default keeps the prior behaviour: keyword A→Z.
+  const [sortKey, setSortKey] = useStoredState('perdia:sort:keywords', 'keyword-asc')
+  const sort = resolveSort(KEYWORD_SORT_OPTIONS, sortKey)
+
   // Hooks
   const { data: allKeywords = [], isLoading } = useKeywords({
     search: searchQuery || undefined,
     clusterId: selectedCluster !== 'all' ? selectedCluster : undefined,
+    sort,
   })
   const { data: starredKeywords = [] } = useStarredKeywords()
   const { data: queuedKeywords = [] } = useQueuedKeywords()
@@ -1052,6 +1061,12 @@ function LibraryTab() {
               </SelectContent>
             </Select>
 
+            <SortDropdown
+              value={sortKey}
+              onChange={setSortKey}
+              options={KEYWORD_SORT_OPTIONS}
+            />
+
             {/* Actions */}
             <div className="flex gap-2">
               <Button onClick={() => setIsAddDialogOpen(true)} className="gap-2">
@@ -1175,8 +1190,9 @@ function LibraryTab() {
                           </button>
                         </td>
                         <td className="p-4">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium text-gray-900">{keyword.keyword}</span>
+                            <NewBadge timestamp={keyword.created_at} />
                             {keyword.is_queued && (
                               <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
                                 <Clock className="w-3 h-3 mr-1" />
