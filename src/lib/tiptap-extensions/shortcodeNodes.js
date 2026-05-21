@@ -32,7 +32,20 @@ function buildCardChildren(tagName, params) {
   ]
   lines.forEach((l) => children.push(['div', { class: 'shortcode-card-line' }, l]))
   if (params.ctaButton) {
-    children.push(['div', { class: 'shortcode-card-cta' }, `${params.ctaButton} →`])
+    if (params.ctaUrl) {
+      children.push([
+        'a',
+        {
+          class: 'shortcode-card-cta',
+          href: params.ctaUrl,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+        },
+        `${params.ctaButton} →`,
+      ])
+    } else {
+      children.push(['div', { class: 'shortcode-card-cta' }, `${params.ctaButton} →`])
+    }
   }
   return children
 }

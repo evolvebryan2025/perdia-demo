@@ -42,7 +42,9 @@ function buildCardHtml(tagName, params, defaultTitle, icon) {
 
   const linesHtml = lines.map((l) => `<div class="shortcode-card-line">${l}</div>`).join('')
   const ctaHtml = params.ctaButton
-    ? `<div class="shortcode-card-cta">${escapeHtml(params.ctaButton)} →</div>`
+    ? params.ctaUrl
+      ? `<a class="shortcode-card-cta" href="${escapeAttr(params.ctaUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(params.ctaButton)} →</a>`
+      : `<div class="shortcode-card-cta">${escapeHtml(params.ctaButton)} →</div>`
     : ''
 
   const attrsEnc = encodeAttrs(params)
