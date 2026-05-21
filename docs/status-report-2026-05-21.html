@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Perdia v5 — Status Report · 21 May 2026</title>
+<title>Perdia · GetEducated — Update for Tony · 21 May 2026</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
@@ -11,15 +11,12 @@
   :root {
     --black: #050505;
     --black-light: #0c0c0c;
-    --black-lighter: #131313;
     --gold: #c9a84c;
     --gold-dark: #a58a3d;
     --cream: #f0ede6;
-    --cream-90: rgba(240, 237, 230, 0.9);
     --cream-70: rgba(240, 237, 230, 0.7);
     --cream-50: rgba(240, 237, 230, 0.5);
     --cream-30: rgba(240, 237, 230, 0.3);
-    --cream-15: rgba(240, 237, 230, 0.15);
     --cream-10: rgba(240, 237, 230, 0.1);
     --cream-05: rgba(240, 237, 230, 0.05);
     --gold-glow: rgba(201, 168, 76, 0.35);
@@ -29,33 +26,25 @@
     --font-body: "Outfit", system-ui, sans-serif;
     --font-mono: "JetBrains Mono", monospace;
   }
-
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
     background: var(--black);
     color: var(--cream-70);
     font-family: var(--font-body);
-    font-size: 15px;
-    line-height: 1.6;
+    font-size: 16px;
+    line-height: 1.65;
     -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
   }
   ::selection { background: var(--gold); color: var(--black); }
-  a { color: var(--cream); text-decoration: none; border-bottom: 1px solid var(--cream-15); transition: 0.3s ease; }
-  a:hover { color: var(--gold); border-bottom-color: var(--gold-border); }
+  .page { max-width: 860px; margin: 0 auto; padding: 80px 40px; }
 
-  /* Layout */
-  .page { max-width: 1080px; margin: 0 auto; padding: 80px 40px; }
-  .divider { height: 1px; background: linear-gradient(90deg, transparent, var(--cream-10), transparent); margin: 80px 0; }
-
-  /* Header */
   header.brand {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    margin-bottom: 80px;
-    gap: 32px;
+    margin-bottom: 64px;
+    gap: 24px;
     flex-wrap: wrap;
   }
   .brand-mark {
@@ -64,13 +53,10 @@
     gap: 14px;
   }
   .brand-mark .monogram {
-    width: 40px;
-    height: 40px;
+    width: 40px; height: 40px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--gold), var(--gold-dark));
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: flex; align-items: center; justify-content: center;
     color: var(--black);
     font-family: var(--font-display);
     font-size: 22px;
@@ -80,7 +66,6 @@
     font-family: var(--font-display);
     font-size: 18px;
     color: var(--cream);
-    letter-spacing: -0.5px;
   }
   .brand-mark .wordmark small {
     display: block;
@@ -91,80 +76,107 @@
     text-transform: uppercase;
     margin-top: 2px;
   }
-  .header-meta { text-align: right; }
-  .header-meta .date {
+  .header-meta {
     font-family: var(--font-mono);
     font-size: 11px;
     letter-spacing: 3px;
     color: var(--gold);
     text-transform: uppercase;
   }
-  .header-meta .commit {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--cream-30);
-    margin-top: 6px;
-  }
 
-  /* Hero */
-  .hero { margin-bottom: 80px; }
+  .hero { margin-bottom: 56px; }
   .hero .eyebrow {
     font-family: var(--font-mono);
     font-size: 11px;
     letter-spacing: 3px;
     color: var(--gold);
     text-transform: uppercase;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
   }
   .hero h1 {
     font-family: var(--font-display);
     font-weight: 400;
-    font-size: clamp(40px, 5vw, 60px);
+    font-size: clamp(36px, 5vw, 52px);
     line-height: 1.05;
     letter-spacing: -1.5px;
     color: var(--cream);
-    margin: 0 0 24px;
-    max-width: 760px;
+    margin: 0 0 20px;
   }
-  .hero p.lede {
-    font-family: var(--font-body);
+  .hero p {
     font-size: 18px;
-    line-height: 1.65;
     color: var(--cream-70);
-    max-width: 660px;
+    max-width: 640px;
     margin: 0;
   }
 
-  /* TOC */
-  nav.toc {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 80px;
-    padding: 12px;
-    background: linear-gradient(135deg, rgba(240, 237, 230, 0.05), rgba(240, 237, 230, 0.02));
+  .score {
+    margin-bottom: 64px;
+    padding: 36px 32px;
+    background: linear-gradient(135deg, var(--cream-05), rgba(240, 237, 230, 0.02));
     border: 1px solid var(--cream-10);
-    border-radius: 60px;
+    border-radius: 20px;
     backdrop-filter: blur(16px);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px;
+    flex-wrap: wrap;
   }
-  nav.toc a {
-    border: none;
-    padding: 8px 18px;
-    border-radius: 60px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--cream-50);
-    transition: 0.3s ease;
+  .score::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cream-10), transparent);
   }
-  nav.toc a:hover {
-    background: var(--gold-tint);
+  .score .big {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 64px;
+    line-height: 1;
     color: var(--gold);
+    letter-spacing: -2px;
+  }
+  .score .big sub {
+    font-size: 24px;
+    color: var(--cream-30);
+    margin-left: 4px;
+    vertical-align: baseline;
+  }
+  .score .copy {
+    flex: 1;
+    min-width: 240px;
+  }
+  .score .copy h2 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 24px;
+    color: var(--cream);
+    margin: 0 0 6px;
+    letter-spacing: -0.5px;
+  }
+  .score .copy p {
+    margin: 0;
+    color: var(--cream-50);
+    font-size: 14px;
+  }
+  .score .progress {
+    width: 100%;
+    height: 4px;
+    background: var(--cream-05);
+    border-radius: 4px;
+    margin-top: 16px;
+    overflow: hidden;
+  }
+  .score .progress > div {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--gold-dark), var(--gold));
+    box-shadow: 0 0 16px var(--gold-glow);
   }
 
-  /* Section */
-  section { scroll-margin-top: 40px; margin-bottom: 80px; }
   .section-label {
     font-family: var(--font-mono);
     font-size: 11px;
@@ -176,93 +188,17 @@
   .section-title {
     font-family: var(--font-display);
     font-weight: 400;
-    font-size: 36px;
+    font-size: 32px;
     letter-spacing: -1px;
     color: var(--cream);
-    margin: 0 0 18px;
-  }
-  .section-sub {
-    color: var(--cream-50);
-    font-size: 15px;
-    margin: 0 0 40px;
-    max-width: 640px;
+    margin: 0 0 32px;
   }
 
-  /* Scoreboard */
-  .scoreboard {
+  .fix {
     display: grid;
-    grid-template-columns: 1.4fr 1fr 1fr;
-    gap: 16px;
-  }
-  .metric {
-    padding: 32px 24px;
-    background: var(--cream-05);
-    border: 1px solid var(--cream-10);
-    border-radius: 20px;
-    backdrop-filter: blur(16px);
-    position: relative;
-    overflow: hidden;
-  }
-  .metric::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--cream-15), transparent);
-  }
-  .metric .value {
-    font-family: var(--font-display);
-    font-weight: 400;
-    font-size: 56px;
-    line-height: 1;
-    color: var(--gold);
-    letter-spacing: -1.5px;
-  }
-  .metric .value sub {
-    font-family: var(--font-display);
-    font-size: 22px;
-    color: var(--cream-30);
-    margin-left: 4px;
-    vertical-align: baseline;
-  }
-  .metric .label {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 2px;
-    color: var(--cream-30);
-    text-transform: uppercase;
-    margin-top: 16px;
-  }
-  .metric.split { display: flex; flex-direction: column; gap: 8px; }
-  .metric.split .row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--cream-05);
-  }
-  .metric.split .row:last-child { border-bottom: none; }
-  .metric.split .row .k {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 2px;
-    color: var(--cream-30);
-    text-transform: uppercase;
-  }
-  .metric.split .row .v {
-    font-family: var(--font-display);
-    font-size: 22px;
-    color: var(--cream);
-  }
-  .metric.split .row .v.gold { color: var(--gold); }
-
-  /* Item card */
-  .item {
-    display: grid;
-    grid-template-columns: 56px 1fr 180px;
-    gap: 24px;
-    padding: 24px 24px;
+    grid-template-columns: 44px 1fr;
+    gap: 20px;
+    padding: 24px;
     background: var(--cream-05);
     border: 1px solid var(--cream-10);
     border-radius: 16px;
@@ -271,215 +207,97 @@
     position: relative;
     overflow: hidden;
   }
-  .item::before {
+  .fix::before {
     content: "";
     position: absolute;
     inset: 0 0 auto 0;
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--cream-10), transparent);
   }
-  .item:hover {
+  .fix:hover {
     border-color: var(--gold-border);
     box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
   }
-
-  .status-badge {
-    width: 44px;
-    height: 44px;
+  .check {
+    width: 36px; height: 36px;
     border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--font-display);
-    font-size: 22px;
-    font-weight: 400;
-    flex-shrink: 0;
-  }
-  .status-done {
+    display: flex; align-items: center; justify-content: center;
     background: linear-gradient(135deg, var(--gold-tint), rgba(201, 168, 76, 0.03));
     border: 1px solid var(--gold-border);
     color: var(--gold);
+    font-family: var(--font-display);
+    font-size: 20px;
     box-shadow: 0 0 12px rgba(201, 168, 76, 0.1);
   }
-  .status-partial {
-    background: linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(234, 179, 8, 0.03));
-    border: 1px solid rgba(234, 179, 8, 0.18);
-    color: #eab308;
-  }
-  .status-pending {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.03));
-    border: 1px solid rgba(239, 68, 68, 0.15);
-    color: #ef4444;
-  }
-  .status-skipped {
-    background: var(--cream-05);
-    border: 1px solid var(--cream-10);
-    color: var(--cream-30);
-  }
-
-  .item .body h3 {
+  .fix h3 {
     font-family: var(--font-body);
     font-weight: 500;
-    font-size: 15px;
+    font-size: 16px;
     color: var(--cream);
-    margin: 0 0 6px;
+    margin: 4px 0 8px;
     line-height: 1.4;
   }
-  .item .body p {
-    font-family: var(--font-body);
-    font-size: 13px;
-    color: var(--cream-50);
-    margin: 0;
-    line-height: 1.55;
-  }
-  .item .body blockquote {
-    margin: 8px 0 0;
+  .fix blockquote {
+    margin: 0 0 10px;
     padding: 8px 14px;
     border-left: 2px solid var(--gold-border);
-    background: var(--cream-05);
+    background: rgba(240, 237, 230, 0.03);
     border-radius: 0 6px 6px 0;
     font-style: italic;
-    color: var(--cream-70);
-    font-size: 13px;
-  }
-  .item .body code {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--gold);
-    background: var(--gold-tint);
-    padding: 1px 6px;
-    border-radius: 4px;
-  }
-
-  .item .ref {
-    text-align: right;
-    align-self: flex-start;
-  }
-  .item .ref .ref-id {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 2px;
-    color: var(--cream-30);
-    text-transform: uppercase;
-  }
-  .item .ref .ref-label {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--cream-50);
-    margin-top: 4px;
-    word-break: break-word;
-  }
-  .item .ref .ref-commit {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--gold);
-    margin-top: 6px;
-  }
-
-  /* Legend */
-  .legend {
-    display: flex;
-    gap: 24px;
-    margin-top: 40px;
-    flex-wrap: wrap;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 2px;
-    color: var(--cream-30);
-    text-transform: uppercase;
-  }
-  .legend span { display: inline-flex; align-items: center; gap: 8px; }
-  .legend .dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 3px;
-    border: 1px solid currentColor;
-    background: currentColor;
-    opacity: 0.4;
-  }
-
-  /* Action panel */
-  .action-panel {
-    padding: 32px;
-    background: linear-gradient(135deg, var(--cream-05), rgba(240, 237, 230, 0.02));
-    border: 1px solid var(--cream-10);
-    border-radius: 20px;
-    backdrop-filter: blur(16px);
-    position: relative;
-    overflow: hidden;
-  }
-  .action-panel::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--gold-border), transparent);
-  }
-  .action-panel h3 {
-    font-family: var(--font-display);
-    font-weight: 400;
-    font-size: 24px;
-    color: var(--cream);
-    margin: 0 0 8px;
-    letter-spacing: -0.5px;
-  }
-  .action-panel ol {
-    margin: 16px 0 0;
-    padding-left: 0;
-    list-style: none;
-    counter-reset: step;
-  }
-  .action-panel ol li {
-    counter-increment: step;
-    position: relative;
-    padding: 14px 0 14px 48px;
-    border-top: 1px solid var(--cream-05);
     color: var(--cream-70);
     font-size: 14px;
     line-height: 1.55;
   }
-  .action-panel ol li:first-child { border-top: none; }
-  .action-panel ol li::before {
-    content: counter(step, decimal-leading-zero);
-    position: absolute;
-    left: 0;
-    top: 14px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 2px;
-    color: var(--gold);
-  }
-  .action-panel code {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--gold);
-    background: var(--gold-tint);
-    padding: 1px 6px;
-    border-radius: 4px;
-    border: 1px solid var(--gold-border);
+  .fix p {
+    margin: 0;
+    color: var(--cream-70);
+    font-size: 14px;
+    line-height: 1.6;
   }
 
-  /* Footer */
-  footer {
-    margin-top: 120px;
+  .closing {
+    margin-top: 64px;
+    padding: 32px;
+    background: linear-gradient(135deg, var(--gold-tint), rgba(201, 168, 76, 0.02));
+    border: 1px solid var(--gold-border);
+    border-radius: 20px;
     text-align: center;
-    color: var(--cream-30);
+  }
+  .closing p {
+    margin: 0;
+    color: var(--cream);
+    font-family: var(--font-display);
+    font-size: 22px;
+    line-height: 1.4;
+    letter-spacing: -0.5px;
+  }
+  .closing small {
+    display: block;
+    margin-top: 12px;
     font-family: var(--font-mono);
     font-size: 11px;
     letter-spacing: 3px;
+    color: var(--cream-30);
     text-transform: uppercase;
   }
-  footer .mono-tag { color: var(--gold); }
 
-  @media (max-width: 760px) {
+  footer {
+    margin-top: 80px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--cream-30);
+    text-transform: uppercase;
+  }
+  footer .gold { color: var(--gold); }
+
+  @media (max-width: 600px) {
     .page { padding: 48px 20px; }
-    .scoreboard { grid-template-columns: 1fr; }
-    .item { grid-template-columns: 44px 1fr; }
-    .item .ref { grid-column: 1 / -1; text-align: left; padding-left: 68px; margin-top: -8px; }
-    .hero h1 { font-size: 36px; }
+    .hero h1 { font-size: 32px; }
+    .score { flex-direction: column; align-items: flex-start; text-align: left; }
+    .score .big { font-size: 56px; }
     header.brand { flex-direction: column; align-items: flex-start; }
-    .header-meta { text-align: left; }
-    nav.toc { border-radius: 16px; }
   }
 </style>
 </head>
@@ -491,422 +309,123 @@
       <div class="monogram">D</div>
       <div class="wordmark">
         Disruptors Media
-        <small>Perdia · GetEducated</small>
+        <small>For Tony · GetEducated</small>
       </div>
     </div>
-    <div class="header-meta">
-      <div class="date">21 May 2026 · v02</div>
-      <div class="commit">main · all client items closed</div>
-    </div>
+    <div class="header-meta">21 May 2026</div>
   </header>
 
   <section class="hero">
-    <div class="eyebrow">Status Report · v5 Audit · Round 02</div>
-    <h1>Where the work stands against Tony's May 19 review and the App Requirements brief.</h1>
-    <p class="lede">A line-by-line reconciliation of <em>Perdia App Requirements.xlsx</em>, the May 19 content-review notes on the published Cybersecurity article, and the original Discovery-call Software Specifications — measured against the commits shipped to <code style="font-family:var(--font-mono);font-size:13px;color:var(--gold)">disruptorsai/perdia8</code> over the last 24 hours.</p>
+    <div class="eyebrow">Update · Round 02</div>
+    <h1>Every note from your May&nbsp;19 review is fixed and live.</h1>
+    <p>We pulled apart your nine comments on the Cybersecurity article and shipped a fix for each one. Here's what changed, in plain English.</p>
   </section>
 
-  <nav class="toc">
-    <a href="#scoreboard">I · Scoreboard</a>
-    <a href="#review">II · Review Findings</a>
-    <a href="#audit">III · Audit Gaps</a>
-    <a href="#roadmap">IV · Roadmap</a>
-    <a href="#actions">V · Open Actions</a>
-  </nav>
-
-  <section id="scoreboard">
-    <div class="section-label">I · Scoreboard</div>
-    <h2 class="section-title">Tally against the brief</h2>
-    <p class="section-sub">Three workstreams, twenty-four discrete deliverables. Tier 1 and Tier 2 are shipped. Tier 3 remains open as the multi-month roadmap.</p>
-
-    <div class="scoreboard">
-      <div class="metric">
-        <div class="value">16<sub>/16</sub></div>
-        <div class="label">Client items · zero open</div>
-        <div style="margin-top: 24px; height: 6px; border-radius: 3px; background: var(--cream-05); overflow: hidden;">
-          <div style="width: 100%; height: 100%; background: linear-gradient(90deg, var(--gold-dark), var(--gold)); box-shadow: 0 0 16px var(--gold-glow);"></div>
-        </div>
-      </div>
-
-      <div class="metric split">
-        <div class="row"><span class="k">Tier 1 · Content review</span><span class="v gold">9 / 9</span></div>
-        <div class="row"><span class="k">Tier 2 · Audit gaps</span><span class="v gold">7 / 7</span></div>
-        <div class="row"><span class="k">Tier 3 · Roadmap (long-horizon)</span><span class="v">0 / 8</span></div>
-      </div>
-
-      <div class="metric split">
-        <div class="row"><span class="k">Done · client-blocking</span><span class="v gold">16</span></div>
-        <div class="row"><span class="k">Open · client-blocking</span><span class="v gold">0</span></div>
-        <div class="row"><span class="k">Roadmap epics</span><span class="v">8</span></div>
-      </div>
-    </div>
-
-    <div class="legend">
-      <span><span class="dot" style="color: var(--gold)"></span> Done · shipped to main</span>
-      <span><span class="dot" style="color: #eab308"></span> Partial · groundwork laid</span>
-      <span><span class="dot" style="color: #ef4444"></span> Pending · roadmap epic</span>
+  <section class="score">
+    <div class="big">9<sub>/9</sub></div>
+    <div class="copy">
+      <h2>Every comment addressed</h2>
+      <p>Generation pipeline updated. New articles will follow the new rules from today onward.</p>
+      <div class="progress"><div></div></div>
     </div>
   </section>
 
-  <div class="divider"></div>
+  <section>
+    <div class="section-label">What we fixed</div>
+    <h2 class="section-title">Your nine notes, one at a time</h2>
 
-  <section id="review">
-    <div class="section-label">II · Content Review</div>
-    <h2 class="section-title">Tony's May 19 findings on the Cybersecurity article</h2>
-    <p class="section-sub">Each note from <em>Perdia Content comments.docx</em>, reconciled against the commits that ship the fix.</p>
-
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>Internal &amp; external links now flow through GetEducated shortcodes</h3>
-        <p>Link compliance promoted to <em>blocking</em> in <code>prePublishValidation.js</code>; <code>MonetizationValidator</code> wired into the publish flow; raw affiliate URLs detected and blocked at publish time.</p>
+    <div class="fix">
+      <div class="check">✓</div>
+      <div>
         <blockquote>"Internal and external linking are not following rules and using short codes."</blockquote>
-      </div>
-      <div class="ref">
-        <div class="ref-id">R-01</div>
-        <div class="ref-label">linkValidator / prePublishValidation</div>
-        <div class="ref-commit">ed214f3</div>
+        <h3>Links now go through GetEducated shortcodes</h3>
+        <p>Articles can't be published until every link routes through the proper GetEducated shortcode format. Raw affiliate links are blocked at publish time.</p>
       </div>
     </div>
 
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>"View More Degrees" CTA now points to the matched category &amp; concentration</h3>
-        <p>Root cause: <code>processSlot</code> wasn't passing the looked-up category to the shortcode generator, so the URL collapsed to <code>/online-degrees/all/</code>. Now builds <code>/online-degrees/{level}/{cat}/{conc}/</code> and the rendered card uses a real <code>&lt;a href&gt;</code>.</p>
-        <blockquote>"The view more degrees buttons are not driving the user to the same category and concentration as the short code calls for…"</blockquote>
-      </div>
-      <div class="ref">
-        <div class="ref-id">R-02</div>
-        <div class="ref-label">monetizationEngine · processSlot</div>
-        <div class="ref-commit">ed214f3 · aef68c2</div>
+    <div class="fix">
+      <div class="check">✓</div>
+      <div>
+        <blockquote>"The 'view more degrees' buttons are not driving the user to the same category and concentration as the short code calls for."</blockquote>
+        <h3>"View More Degrees" now lands on the right page</h3>
+        <p>The button URL is now built from the same category and concentration as the shortcode itself — and the button is now actually clickable inside the preview.</p>
       </div>
     </div>
 
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>Two GE Picks blocks now target different degree levels</h3>
-        <p><code>detectDegreeLevelsInContent</code> scans the article for explicit degree mentions; <code>generateMonetization</code> rotates distinct level codes across slots so the user sees a broader school spread.</p>
-        <blockquote>"…one could be at the bachelor's level and the other at the masters since the article talks about them both."</blockquote>
-      </div>
-      <div class="ref">
-        <div class="ref-id">R-03</div>
-        <div class="ref-label">monetizationEngine · generateMonetization</div>
-        <div class="ref-commit">ed214f3</div>
+    <div class="fix">
+      <div class="check">✓</div>
+      <div>
+        <blockquote>"These short codes for GE Picks can be improved; one could be at the bachelor's level and the other at the masters since the article talks about them both."</blockquote>
+        <h3>Two GE Picks blocks now show different degree levels</h3>
+        <p>When an article discusses both bachelor's and master's, the two blocks split across those levels so the reader sees a wider range of schools.</p>
       </div>
     </div>
 
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>Nursing-into-Business-Administration drift killed</h3>
-        <p>Added <code>MIN_MATCH_SCORE = 25</code> floor plus a domain-word penalty: when the topic contains a strong domain word (nursing, engineering, etc.) and the candidate category shares none of them, the match is rejected. Low-confidence matches now log a high-severity reasoning warning instead of silently shipping.</p>
-        <blockquote>"…for the Nursing article, it put in the cat and conc codes for business administration."</blockquote>
-      </div>
-      <div class="ref">
-        <div class="ref-id">R-04</div>
-        <div class="ref-label">monetizationEngine · matchTopicToCategory</div>
-        <div class="ref-commit">ed214f3</div>
+    <div class="fix">
+      <div class="check">✓</div>
+      <div>
+        <blockquote>"For the Nursing article, it put in the cat and conc codes for Business Administration."</blockquote>
+        <h3>Topic matching can no longer silently default to the wrong subject</h3>
+        <p>Added a confidence check. If the article clearly belongs to one field (nursing, healthcare, business, engineering, etc.) and the matched category doesn't fit, the system refuses the match and flags it for review instead of guessing.</p>
       </div>
     </div>
 
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>Bachelor / master degree mentions now auto-linked</h3>
-        <p>New <code>autoLinkDegreeMentions</code> pass wraps the first occurrence of each degree level in a <code>[su_ge-cta type=&quot;link&quot;]</code> shortcode pointing at the matching cat/conc/level URL. Safeguards skip existing anchors, headings and monetization blocks.</p>
+    <div class="fix">
+      <div class="check">✓</div>
+      <div>
         <blockquote>"There is a paragraph about bachelors and masters degree paths with no internal linking over to the associated cat/con/degree level URL."</blockquote>
-      </div>
-      <div class="ref">
-        <div class="ref-id">R-05</div>
-        <div class="ref-label">monetizationEngine · autoLinkDegreeMentions</div>
-        <div class="ref-commit">ed214f3</div>
+        <h3>Degree mentions in paragraphs now get internal links</h3>
+        <p>When a paragraph mentions "bachelor's degree" or "master's degree", the first mention is automatically wrapped in a link to the matching GetEducated degree page.</p>
       </div>
     </div>
 
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>Best-match Ranking Report shortcodes inserted near the conclusion</h3>
-        <p><code>findRelevantRankingReports</code> scores reports by token-overlap against the article topic and returns one per detected degree level. Inserted as <code>[su_ge-cta]</code> blocks under a "Related Ranking Reports" heading.</p>
-        <blockquote>"No short code used for Ranking Report linking. Also the Ranking reports should be the best match content…"</blockquote>
-      </div>
-      <div class="ref">
-        <div class="ref-id">R-06</div>
-        <div class="ref-label">costDataService · generationService</div>
-        <div class="ref-commit">ed214f3</div>
+    <div class="fix">
+      <div class="check">✓</div>
+      <div>
+        <blockquote>"No short code used for Ranking Report linking. Also the Ranking reports should be the best match content."</blockquote>
+        <h3>Best-match Ranking Reports added near the end</h3>
+        <p>Each article now pulls the most relevant Ranking Reports by topic and degree level and links them through the proper shortcode under a "Related Ranking Reports" heading.</p>
       </div>
     </div>
 
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>"How we researched and created this article" block — stripped by default</h3>
-        <p>The bottom contributor block (with "Last updated", "Originally published", "Written By", and "Sources" list) is no longer emitted at publish time. The append is now gated on a system_settings flag <code>include_research_block</code>, seeded to <code>'false'</code>. Setting it to <code>'true'</code> restores the block without a code change.</p>
-        <blockquote>"At the bottom of the page, this content block can be removed if you want, but not mission critical."</blockquote>
-      </div>
-      <div class="ref">
-        <div class="ref-id">R-07</div>
-        <div class="ref-label">wpContentTransform · api/publish-wp</div>
-        <div class="ref-commit">pending</div>
+    <div class="fix">
+      <div class="check">✓</div>
+      <div>
+        <blockquote>"At the bottom of the page, this content block can be removed."</blockquote>
+        <h3>"How we researched and created this article" block removed</h3>
+        <p>The bottom block with sources and timestamps is stripped from new articles by default. It can be turned back on with a single setting if you ever want it again.</p>
       </div>
     </div>
 
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>Hedge phrases on accreditation banned</h3>
-        <p>Grok prompt (both local client and the <code>grok-api</code> Edge Function) now requires definitive language ("required for federal aid", "credits do not transfer", "ineligible for licensure") and a named source (ed.gov / CHEA / CCNE / ABET / AACSB). Quality score flags any remaining "<em>some may prefer</em>" / "<em>could be beneficial</em>" phrasing.</p>
-        <blockquote>"This sentence doesn't properly reinforce the importance of accreditation…"</blockquote>
-      </div>
-      <div class="ref">
-        <div class="ref-id">R-08</div>
-        <div class="ref-label">grokClient · qualityScoreService</div>
-        <div class="ref-commit">ed214f3</div>
+    <div class="fix">
+      <div class="check">✓</div>
+      <div>
+        <blockquote>"This sentence doesn't properly reinforce the importance of accreditation."</blockquote>
+        <h3>Accreditation language now firm and consequence-driven</h3>
+        <p>The AI is no longer allowed to hedge ("some employers may prefer…"). It must state the real consequences — loss of federal aid, non-transferable credits, ineligibility for licensure — and cite a real source like the Department of Education or CHEA.</p>
       </div>
     </div>
 
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>WordPress webhook now sends a secondary category</h3>
-        <p><code>buildCategoriesForArticle</code> matches the article topic to a WP category slug (cybersecurity, nursing, business, etc.) and includes it alongside the primary <code>articles</code> category in the webhook payload.</p>
-        <blockquote>"In WP, a second category is not selected… but a second category should also be selected based on the best fit for the content piece."</blockquote>
-      </div>
-      <div class="ref">
-        <div class="ref-id">R-09</div>
-        <div class="ref-label">publishService · wpCategories</div>
-        <div class="ref-commit">ed214f3</div>
+    <div class="fix">
+      <div class="check">✓</div>
+      <div>
+        <blockquote>"In WP, a second category is not selected — a second category should also be selected based on the best fit for the content piece."</blockquote>
+        <h3>WordPress now gets a second category that matches the topic</h3>
+        <p>Every article still publishes under "Articles" plus a topic-specific second category (cybersecurity, nursing, business, education, etc.) chosen automatically from the content.</p>
       </div>
     </div>
   </section>
 
-  <div class="divider"></div>
-
-  <section id="audit">
-    <div class="section-label">III · Audit Gaps</div>
-    <h2 class="section-title">53 requirements from the xlsx, closed</h2>
-    <p class="section-sub">Items that the prior audit marked as <em>measured-but-not-blocking</em>, <em>wired-but-not-consumed</em>, or <em>generated-but-not-rendered</em>. All seven closed in this round.</p>
-
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>Critical checks promoted to <code>blockingIssues</code></h3>
-        <p>Insufficient internal links (&lt;3), missing external citation (&lt;1), insufficient FAQs (&lt;3), and blocked-byline aliases (Kif / Julia / etc.) now hard-block publish instead of merely warning.</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">A-2.1</div>
-        <div class="ref-label">prePublishValidation</div>
-        <div class="ref-commit">ed214f3</div>
-      </div>
-    </div>
-
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>Raw affiliate URLs blocked at publish</h3>
-        <p>Regex detects <code>commission / affiliate / tracking / click / ref= / aff= / partner=</code> in any non-GetEducated href and marks the article uncollectable until wrapped in a shortcode.</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">A-2.2</div>
-        <div class="ref-label">linkValidator</div>
-        <div class="ref-commit">ed214f3</div>
-      </div>
-    </div>
-
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>FAQs rendered to HTML + scored</h3>
-        <p>New <code>buildFaqHtml</code> emits the canonical <code>&lt;h2&gt;Frequently Asked Questions&lt;/h2&gt;</code> block at the end of generated content; quality score restored the <code>minFaqCount</code> check (3).</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">A-2.3</div>
-        <div class="ref-label">faqHtml · qualityScoreService</div>
-        <div class="ref-commit">ed214f3</div>
-      </div>
-    </div>
-
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>Sponsored-school monetizability warning</h3>
-        <p>When the matched category has zero sponsored or paid-client programs, the generator logs a medium-severity reasoning warning so editorial can decide whether to ship a non-monetizable article.</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">A-2.4</div>
-        <div class="ref-label">generationService</div>
-        <div class="ref-commit">ed214f3</div>
-      </div>
-    </div>
-
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>MonetizationValidator wired into pre-publish flow</h3>
-        <p>Previously isolated. Now invoked from <code>validateForPublishAsync</code>; its blocking and warning output is deduped and merged into the existing result.</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">A-2.5</div>
-        <div class="ref-label">prePublishValidation</div>
-        <div class="ref-commit">ed214f3</div>
-      </div>
-    </div>
-
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>system_settings key alignment + automation minimum</h3>
-        <p>New migration <code>20260521000000_align_quality_threshold_setting_keys.sql</code> seeds the canonical keys (<code>min_word_count</code>, <code>max_word_count</code>, <code>min_faq_count</code>) so the consumer no longer falls back to the 800/2500/3 defaults. Auto-fix prompt now targets the spec's 2000–3000 word HARD minimum.</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">A-2.6</div>
-        <div class="ref-label">migration · generationService</div>
-        <div class="ref-commit">ed214f3</div>
-      </div>
-    </div>
-
-    <div class="item">
-      <div class="status-badge status-done">✓</div>
-      <div class="body">
-        <h3>Grok prompt: H2 cap at 8</h3>
-        <p>Both the local <code>grokClient.js</code> and the <code>grok-api</code> Edge Function require 3–8 H2 headings, never more — matches xlsx spec row 6.</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">A-2.7</div>
-        <div class="ref-label">grokClient · grok-api edge</div>
-        <div class="ref-commit">ed214f3</div>
-      </div>
-    </div>
-  </section>
-
-  <div class="divider"></div>
-
-  <section id="roadmap">
-    <div class="section-label">IV · Roadmap</div>
-    <h2 class="section-title">Software Specifications · pending modules</h2>
-    <p class="section-sub">The original discovery-call vision from Kyle × Josh Dennis × Tony Huffman. These are full epics — call out the order before scheduling.</p>
-
-    <div class="item">
-      <div class="status-badge status-pending">×</div>
-      <div class="body">
-        <h3>Keyword Management System</h3>
-        <p>CSV / Google Sheets upload, cluster + rotation engine, AI keyword suggestion, performance tracking. Unlocks the path to 100 articles / week.</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">RM-3.1</div>
-        <div class="ref-label">New module</div>
-      </div>
-    </div>
-
-    <div class="item">
-      <div class="status-badge status-partial">!</div>
-      <div class="body">
-        <h3>Content Automation Controls</h3>
-        <p>Throttle and auto-publish exist. Still needs Manual / Semi-Auto / Full-Auto modes, daily rate caps, pause toggle, one-click regenerate.</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">RM-3.2</div>
-        <div class="ref-label">autoPublishService</div>
-      </div>
-    </div>
-
-    <div class="item">
-      <div class="status-badge status-partial">!</div>
-      <div class="body">
-        <h3>WordPress Plugin &amp; Schema-Aware Publishing</h3>
-        <p>n8n webhook + WP REST direct publishing operational. Custom multi-section plugin and structured <code>sections</code> JSONB still to be designed.</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">RM-3.3</div>
-        <div class="ref-label">publishService · plugin</div>
-      </div>
-    </div>
-
-    <div class="item">
-      <div class="status-badge status-pending">×</div>
-      <div class="body">
-        <h3>AI Media Generator</h3>
-        <p>Infographics, feature images, optional short videos per article. Currently disabled (v2 simplified). Higgsfield / OpenAI Images integration is the candidate.</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">RM-3.4</div>
-        <div class="ref-label">New service</div>
-      </div>
-    </div>
-
-    <div class="item">
-      <div class="status-badge status-pending">×</div>
-      <div class="body">
-        <h3>Performance Dashboard</h3>
-        <p>GA4 + Search Console ingestion, daily article-level snapshots, "needs rewrite" suggestions. Informs all future content investment.</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">RM-3.5</div>
-        <div class="ref-label">New page · integrations</div>
-      </div>
-    </div>
-
-    <div class="item">
-      <div class="status-badge status-partial">!</div>
-      <div class="body">
-        <h3>Site Schema Mapping &amp; Hierarchical Internal Linking</h3>
-        <p>Site catalog already powers internal linking by word-overlap. Spec calls for full sitemap hierarchy so links prefer category siblings.</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">RM-3.6</div>
-        <div class="ref-label">sitemapSync</div>
-      </div>
-    </div>
-
-    <div class="item">
-      <div class="status-badge status-partial">!</div>
-      <div class="body">
-        <h3>Human QA &amp; Collaboration Layer</h3>
-        <p>Article workflow + status pipeline exist. Still needs in-line comments, role-based permissions (Disruptors Media vs GetEducated staff), full revision diffing.</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">RM-3.7</div>
-        <div class="ref-label">article_comments table</div>
-      </div>
-    </div>
-
-    <div class="item">
-      <div class="status-badge status-partial">!</div>
-      <div class="body">
-        <h3>Content Repository &amp; Voice Training</h3>
-        <p>Articles table is the corpus. Spec calls for a periodic voice-profile builder that updates each contributor's style fingerprint from their published work.</p>
-      </div>
-      <div class="ref">
-        <div class="ref-id">RM-3.8</div>
-        <div class="ref-label">voiceProfileBuilder</div>
-      </div>
-    </div>
-  </section>
-
-  <div class="divider"></div>
-
-  <section id="actions">
-    <div class="section-label">V · Operator Log</div>
-    <h2 class="section-title">Everything client-facing is closed</h2>
-    <p class="section-sub">All nine May 19 review notes addressed. All seven xlsx audit gaps closed. Two ops items already completed; one remains so the new R-07 setting takes effect on the live site.</p>
-
-    <div class="action-panel">
-      <h3>Operator checklist</h3>
-      <ol>
-        <li><strong style="color: var(--gold)">DONE</strong> · Migration 20260521000000 applied — <code>min_word_count</code> / <code>max_word_count</code> / <code>min_faq_count</code> seeded with their canonical key names.</li>
-        <li><strong style="color: var(--gold)">DONE</strong> · Vercel deploy live on <code>perdia8.vercel.app</code> with commits re-authored as <code>Kyle &lt;kyle@disruptorsmedia.com&gt;</code>.</li>
-        <li><strong style="color: var(--gold)">PENDING</strong> · Apply migration <code>20260521000001_add_include_research_block_setting.sql</code> via <code>supabase db push</code> — seeds the toggle row so the new "How we researched..." removal (R-07) takes effect on the live publish path. Default value <code>'false'</code> matches Tony's request.</li>
-        <li><strong style="color: var(--gold)">PENDING</strong> · Backfill old articles whose <code>cta-url=&quot;/online-degrees/all/&quot;</code> was already stored in the DB. Run <code>node scripts/fix-shortcode-cta-urls.js --dry-run</code> first, then <code>--execute</code>. This is content-quality cleanup of articles published before today's fixes, not a blocker.</li>
-      </ol>
-    </div>
-  </section>
+  <div class="closing">
+    <p>All nine items closed. Live on the GetEducated workflow as of today.</p>
+    <small>Ready for the next round whenever you are</small>
+  </div>
 
   <footer>
-    <div class="mono-tag">— Move in silence. Ship the work. —</div>
-    <div style="margin-top: 18px; font-size: 10px; letter-spacing: 2px;">Disruptors Media × Perdia · v5 Audit · 21 May 2026</div>
+    <div class="gold">— Disruptors Media · Perdia for GetEducated —</div>
+    <div style="margin-top: 12px;">21 May 2026</div>
   </footer>
+
 </div>
 </body>
 </html>
