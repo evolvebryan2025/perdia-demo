@@ -3,429 +3,420 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Perdia · GetEducated — Update for Tony · 21 May 2026</title>
+<title>Perdia — Status, 21 May</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --black: #050505;
-    --black-light: #0c0c0c;
-    --gold: #c9a84c;
-    --gold-dark: #a58a3d;
-    --cream: #f0ede6;
-    --cream-70: rgba(240, 237, 230, 0.7);
-    --cream-50: rgba(240, 237, 230, 0.5);
-    --cream-30: rgba(240, 237, 230, 0.3);
-    --cream-10: rgba(240, 237, 230, 0.1);
-    --cream-05: rgba(240, 237, 230, 0.05);
-    --gold-glow: rgba(201, 168, 76, 0.35);
-    --gold-border: rgba(201, 168, 76, 0.15);
-    --gold-tint: rgba(201, 168, 76, 0.08);
+    --black:      #050505;
+    --gold:       #c9a84c;
+    --gold-dim:   rgba(201, 168, 76, 0.6);
+    --cream:      #f0ede6;
+    --cream-70:   rgba(240, 237, 230, 0.7);
+    --cream-50:   rgba(240, 237, 230, 0.5);
+    --cream-30:   rgba(240, 237, 230, 0.3);
+    --cream-15:   rgba(240, 237, 230, 0.15);
+    --cream-10:   rgba(240, 237, 230, 0.1);
     --font-display: "Instrument Serif", Georgia, serif;
-    --font-body: "Outfit", system-ui, sans-serif;
-    --font-mono: "JetBrains Mono", monospace;
+    --font-body:    "Outfit", system-ui, sans-serif;
+    --font-mono:    "JetBrains Mono", monospace;
   }
+
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
     background: var(--black);
-    color: var(--cream-70);
+    color: var(--cream);
     font-family: var(--font-body);
     font-size: 16px;
     line-height: 1.65;
+    font-weight: 300;
     -webkit-font-smoothing: antialiased;
   }
   ::selection { background: var(--gold); color: var(--black); }
-  .page { max-width: 860px; margin: 0 auto; padding: 80px 40px; }
+  a { color: var(--cream); text-decoration: none; }
 
-  header.brand {
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 64px 32px 96px;
+  }
+
+  /* — Top bar — */
+  .topbar {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     justify-content: space-between;
-    margin-bottom: 64px;
     gap: 24px;
     flex-wrap: wrap;
-  }
-  .brand-mark {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-  .brand-mark .monogram {
-    width: 40px; height: 40px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--gold), var(--gold-dark));
-    display: flex; align-items: center; justify-content: center;
-    color: var(--black);
-    font-family: var(--font-display);
-    font-size: 22px;
-    box-shadow: 0 0 16px var(--gold-glow);
-  }
-  .brand-mark .wordmark {
-    font-family: var(--font-display);
-    font-size: 18px;
-    color: var(--cream);
-  }
-  .brand-mark .wordmark small {
-    display: block;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 3px;
-    color: var(--cream-30);
-    text-transform: uppercase;
-    margin-top: 2px;
-  }
-  .header-meta {
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--cream-10);
+    margin-bottom: 80px;
     font-family: var(--font-mono);
     font-size: 11px;
-    letter-spacing: 3px;
-    color: var(--gold);
+    letter-spacing: 2.5px;
     text-transform: uppercase;
+    color: var(--cream-50);
   }
+  .topbar .title { color: var(--cream); letter-spacing: 1.5px; }
+  .topbar .title em { font-style: normal; color: var(--gold); }
+  .topbar nav { display: flex; gap: 12px; flex-wrap: wrap; }
+  .topbar nav a {
+    color: var(--cream-50);
+    transition: color 0.2s ease;
+  }
+  .topbar nav a:hover { color: var(--gold); }
+  .topbar nav .bk { color: var(--cream-30); }
 
-  .hero { margin-bottom: 56px; }
-  .hero .eyebrow {
+  /* — Cover — */
+  #cover { margin-bottom: 112px; }
+  #cover .label {
     font-family: var(--font-mono);
     font-size: 11px;
     letter-spacing: 3px;
-    color: var(--gold);
     text-transform: uppercase;
-    margin-bottom: 16px;
+    color: var(--gold);
+    margin-bottom: 24px;
   }
-  .hero h1 {
+  #cover h1 {
     font-family: var(--font-display);
     font-weight: 400;
-    font-size: clamp(36px, 5vw, 52px);
-    line-height: 1.05;
-    letter-spacing: -1.5px;
+    font-size: clamp(40px, 6vw, 68px);
+    line-height: 1.02;
+    letter-spacing: -2px;
     color: var(--cream);
-    margin: 0 0 20px;
+    margin: 0 0 28px;
   }
-  .hero p {
-    font-size: 18px;
+  #cover h1 em { font-style: italic; color: var(--gold); }
+  #cover p {
+    font-size: 17px;
+    color: var(--cream-70);
+    max-width: 600px;
+    margin: 0;
+    line-height: 1.65;
+  }
+
+  /* — Section — */
+  section { scroll-margin-top: 32px; margin-bottom: 96px; }
+  .section-head {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 32px;
+  }
+  .section-head .roman {
+    display: inline-block;
+    color: var(--gold);
+    margin-right: 12px;
+  }
+  .section-head .sep { color: var(--cream-30); margin: 0 10px; }
+  .section-head .title { color: var(--cream); }
+
+  h2.headline {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(28px, 3.8vw, 42px);
+    line-height: 1.1;
+    letter-spacing: -1.2px;
+    color: var(--cream);
+    margin: 0 0 8px;
+  }
+  .as-of {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--cream-30);
+    margin-bottom: 24px;
+  }
+  .lede {
+    font-size: 16px;
     color: var(--cream-70);
     max-width: 640px;
-    margin: 0;
+    margin: 0 0 48px;
+    line-height: 1.7;
   }
 
-  .score {
-    margin-bottom: 64px;
+  /* — Scoreboard card — */
+  .score-card {
     padding: 36px 32px;
-    background: linear-gradient(135deg, var(--cream-05), rgba(240, 237, 230, 0.02));
-    border: 1px solid var(--cream-10);
-    border-radius: 20px;
-    backdrop-filter: blur(16px);
-    position: relative;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 32px;
-    flex-wrap: wrap;
+    border-top: 1px solid var(--cream-15);
+    border-bottom: 1px solid var(--cream-15);
   }
-  .score::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--cream-10), transparent);
+  .score-card .url {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: lowercase;
+    color: var(--cream-50);
+    margin-bottom: 16px;
   }
-  .score .big {
+  .score-card .big {
     font-family: var(--font-display);
     font-weight: 400;
-    font-size: 64px;
+    font-size: 72px;
     line-height: 1;
+    letter-spacing: -3px;
     color: var(--gold);
-    letter-spacing: -2px;
+    margin-bottom: 32px;
   }
-  .score .big sub {
-    font-size: 24px;
+  .score-card .big sub {
+    font-family: var(--font-display);
+    font-size: 28px;
     color: var(--cream-30);
-    margin-left: 4px;
+    margin-left: 2px;
     vertical-align: baseline;
   }
-  .score .copy {
-    flex: 1;
-    min-width: 240px;
+  .score-card .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
   }
-  .score .copy h2 {
+  .score-card .stats .stat {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .score-card .stats .stat .n {
     font-family: var(--font-display);
-    font-weight: 400;
-    font-size: 24px;
+    font-size: 28px;
     color: var(--cream);
-    margin: 0 0 6px;
     letter-spacing: -0.5px;
   }
-  .score .copy p {
-    margin: 0;
-    color: var(--cream-50);
-    font-size: 14px;
-  }
-  .score .progress {
-    width: 100%;
-    height: 4px;
-    background: var(--cream-05);
-    border-radius: 4px;
-    margin-top: 16px;
-    overflow: hidden;
-  }
-  .score .progress > div {
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, var(--gold-dark), var(--gold));
-    box-shadow: 0 0 16px var(--gold-glow);
-  }
-
-  .section-label {
+  .score-card .stats .stat .k {
     font-family: var(--font-mono);
     font-size: 11px;
-    letter-spacing: 3px;
-    color: var(--gold);
+    letter-spacing: 2.5px;
+    color: var(--cream-50);
     text-transform: uppercase;
-    margin-bottom: 12px;
   }
-  .section-title {
-    font-family: var(--font-display);
-    font-weight: 400;
-    font-size: 32px;
-    letter-spacing: -1px;
-    color: var(--cream);
-    margin: 0 0 32px;
-  }
+  .score-card .stats .stat.gold .n { color: var(--gold); }
 
-  .fix {
+  /* — Checklist row — */
+  .row {
     display: grid;
-    grid-template-columns: 44px 1fr;
-    gap: 20px;
-    padding: 24px;
-    background: var(--cream-05);
-    border: 1px solid var(--cream-10);
-    border-radius: 16px;
-    margin-bottom: 12px;
-    transition: 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-    position: relative;
-    overflow: hidden;
+    grid-template-columns: 28px 1fr auto;
+    column-gap: 24px;
+    row-gap: 6px;
+    align-items: baseline;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--cream-10);
   }
-  .fix::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--cream-10), transparent);
-  }
-  .fix:hover {
-    border-color: var(--gold-border);
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
-  }
-  .check {
-    width: 36px; height: 36px;
-    border-radius: 12px;
-    display: flex; align-items: center; justify-content: center;
-    background: linear-gradient(135deg, var(--gold-tint), rgba(201, 168, 76, 0.03));
-    border: 1px solid var(--gold-border);
-    color: var(--gold);
+  .row:first-child { border-top: 1px solid var(--cream-10); }
+  .row .mark {
     font-family: var(--font-display);
-    font-size: 20px;
-    box-shadow: 0 0 12px rgba(201, 168, 76, 0.1);
+    font-size: 22px;
+    line-height: 1;
+    color: var(--gold);
+    text-align: left;
   }
-  .fix h3 {
-    font-family: var(--font-body);
-    font-weight: 500;
+  .row .mark.x { color: var(--cream-30); }
+  .row .mark.bang { color: var(--gold-dim); }
+  .row .desc {
     font-size: 16px;
     color: var(--cream);
-    margin: 4px 0 8px;
-    line-height: 1.4;
+    line-height: 1.5;
   }
-  .fix blockquote {
-    margin: 0 0 10px;
-    padding: 8px 14px;
-    border-left: 2px solid var(--gold-border);
-    background: rgba(240, 237, 230, 0.03);
-    border-radius: 0 6px 6px 0;
+  .row .desc em {
+    display: block;
     font-style: italic;
-    color: var(--cream-70);
+    font-weight: 300;
+    color: var(--cream-50);
+    margin-top: 6px;
     font-size: 14px;
     line-height: 1.55;
   }
-  .fix p {
-    margin: 0;
-    color: var(--cream-70);
-    font-size: 14px;
-    line-height: 1.6;
+  .row .ref {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--cream-50);
+    white-space: nowrap;
   }
+  .row .ref .id { color: var(--gold); margin-right: 8px; }
 
-  .closing {
-    margin-top: 64px;
-    padding: 32px;
-    background: linear-gradient(135deg, var(--gold-tint), rgba(201, 168, 76, 0.02));
-    border: 1px solid var(--gold-border);
-    border-radius: 20px;
-    text-align: center;
-  }
-  .closing p {
-    margin: 0;
-    color: var(--cream);
+  /* — Verdict — */
+  .verdict-body {
     font-family: var(--font-display);
-    font-size: 22px;
+    font-weight: 400;
+    font-size: clamp(22px, 2.6vw, 28px);
     line-height: 1.4;
+    color: var(--cream);
     letter-spacing: -0.5px;
+    max-width: 600px;
+    margin: 0 0 48px;
   }
-  .closing small {
-    display: block;
-    margin-top: 12px;
+  .verdict-body em { font-style: italic; color: var(--gold); }
+  .tagline {
     font-family: var(--font-mono);
     font-size: 11px;
     letter-spacing: 3px;
-    color: var(--cream-30);
     text-transform: uppercase;
+    color: var(--cream-30);
+    border-top: 1px solid var(--cream-10);
+    padding-top: 28px;
   }
+  .tagline .gold { color: var(--gold); }
 
+  /* — Footer — */
   footer {
-    margin-top: 80px;
+    margin-top: 96px;
     text-align: center;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 10px;
     letter-spacing: 3px;
-    color: var(--cream-30);
     text-transform: uppercase;
+    color: var(--cream-30);
   }
   footer .gold { color: var(--gold); }
 
   @media (max-width: 600px) {
-    .page { padding: 48px 20px; }
-    .hero h1 { font-size: 32px; }
-    .score { flex-direction: column; align-items: flex-start; text-align: left; }
-    .score .big { font-size: 56px; }
-    header.brand { flex-direction: column; align-items: flex-start; }
+    .page { padding: 40px 20px 64px; }
+    .score-card .stats { grid-template-columns: 1fr; }
+    .row { grid-template-columns: 24px 1fr; }
+    .row .ref { grid-column: 1 / -1; padding-left: 48px; }
+    .topbar { font-size: 10px; }
   }
 </style>
 </head>
 <body>
 <div class="page">
 
-  <header class="brand">
-    <div class="brand-mark">
-      <div class="monogram">D</div>
-      <div class="wordmark">
-        Disruptors Media
-        <small>For Tony · GetEducated</small>
-      </div>
-    </div>
-    <div class="header-meta">21 May 2026</div>
-  </header>
-
-  <section class="hero">
-    <div class="eyebrow">Update · Round 02</div>
-    <h1>Every note from your May&nbsp;19 review is fixed and live.</h1>
-    <p>We pulled apart your nine comments on the Cybersecurity article and shipped a fix for each one. Here's what changed, in plain English.</p>
-  </section>
-
-  <section class="score">
-    <div class="big">9<sub>/9</sub></div>
-    <div class="copy">
-      <h2>Every comment addressed</h2>
-      <p>Generation pipeline updated. New articles will follow the new rules from today onward.</p>
-      <div class="progress"><div></div></div>
-    </div>
-  </section>
-
-  <section>
-    <div class="section-label">What we fixed</div>
-    <h2 class="section-title">Your nine notes, one at a time</h2>
-
-    <div class="fix">
-      <div class="check">✓</div>
-      <div>
-        <blockquote>"Internal and external linking are not following rules and using short codes."</blockquote>
-        <h3>Links now go through GetEducated shortcodes</h3>
-        <p>Articles can't be published until every link routes through the proper GetEducated shortcode format. Raw affiliate links are blocked at publish time.</p>
-      </div>
-    </div>
-
-    <div class="fix">
-      <div class="check">✓</div>
-      <div>
-        <blockquote>"The 'view more degrees' buttons are not driving the user to the same category and concentration as the short code calls for."</blockquote>
-        <h3>"View More Degrees" now lands on the right page</h3>
-        <p>The button URL is now built from the same category and concentration as the shortcode itself — and the button is now actually clickable inside the preview.</p>
-      </div>
-    </div>
-
-    <div class="fix">
-      <div class="check">✓</div>
-      <div>
-        <blockquote>"These short codes for GE Picks can be improved; one could be at the bachelor's level and the other at the masters since the article talks about them both."</blockquote>
-        <h3>Two GE Picks blocks now show different degree levels</h3>
-        <p>When an article discusses both bachelor's and master's, the two blocks split across those levels so the reader sees a wider range of schools.</p>
-      </div>
-    </div>
-
-    <div class="fix">
-      <div class="check">✓</div>
-      <div>
-        <blockquote>"For the Nursing article, it put in the cat and conc codes for Business Administration."</blockquote>
-        <h3>Topic matching can no longer silently default to the wrong subject</h3>
-        <p>Added a confidence check. If the article clearly belongs to one field (nursing, healthcare, business, engineering, etc.) and the matched category doesn't fit, the system refuses the match and flags it for review instead of guessing.</p>
-      </div>
-    </div>
-
-    <div class="fix">
-      <div class="check">✓</div>
-      <div>
-        <blockquote>"There is a paragraph about bachelors and masters degree paths with no internal linking over to the associated cat/con/degree level URL."</blockquote>
-        <h3>Degree mentions in paragraphs now get internal links</h3>
-        <p>When a paragraph mentions "bachelor's degree" or "master's degree", the first mention is automatically wrapped in a link to the matching GetEducated degree page.</p>
-      </div>
-    </div>
-
-    <div class="fix">
-      <div class="check">✓</div>
-      <div>
-        <blockquote>"No short code used for Ranking Report linking. Also the Ranking reports should be the best match content."</blockquote>
-        <h3>Best-match Ranking Reports added near the end</h3>
-        <p>Each article now pulls the most relevant Ranking Reports by topic and degree level and links them through the proper shortcode under a "Related Ranking Reports" heading.</p>
-      </div>
-    </div>
-
-    <div class="fix">
-      <div class="check">✓</div>
-      <div>
-        <blockquote>"At the bottom of the page, this content block can be removed."</blockquote>
-        <h3>"How we researched and created this article" block removed</h3>
-        <p>The bottom block with sources and timestamps is stripped from new articles by default. It can be turned back on with a single setting if you ever want it again.</p>
-      </div>
-    </div>
-
-    <div class="fix">
-      <div class="check">✓</div>
-      <div>
-        <blockquote>"This sentence doesn't properly reinforce the importance of accreditation."</blockquote>
-        <h3>Accreditation language now firm and consequence-driven</h3>
-        <p>The AI is no longer allowed to hedge ("some employers may prefer…"). It must state the real consequences — loss of federal aid, non-transferable credits, ineligibility for licensure — and cite a real source like the Department of Education or CHEA.</p>
-      </div>
-    </div>
-
-    <div class="fix">
-      <div class="check">✓</div>
-      <div>
-        <blockquote>"In WP, a second category is not selected — a second category should also be selected based on the best fit for the content piece."</blockquote>
-        <h3>WordPress now gets a second category that matches the topic</h3>
-        <p>Every article still publishes under "Articles" plus a topic-specific second category (cybersecurity, nursing, business, education, etc.) chosen automatically from the content.</p>
-      </div>
-    </div>
-  </section>
-
-  <div class="closing">
-    <p>All nine items closed. Live on the GetEducated workflow as of today.</p>
-    <small>Ready for the next round whenever you are</small>
+  <div class="topbar">
+    <div class="title">Perdia <span class="bk">—</span> Status, <em>21 May</em></div>
+    <nav>
+      <span class="bk">[</span><a href="#cover">Cover</a><span class="bk">]</span>
+      <span class="bk">[</span><a href="#scoreboard">Scoreboard</a><span class="bk">]</span>
+      <span class="bk">[</span><a href="#carries">What carries</a><span class="bk">]</span>
+      <span class="bk">[</span><a href="#verdict">Verdict</a><span class="bk">]</span>
+    </nav>
   </div>
 
-  <footer>
-    <div class="gold">— Disruptors Media · Perdia for GetEducated —</div>
-    <div style="margin-top: 12px;">21 May 2026</div>
-  </footer>
+  <section id="cover">
+    <div class="label">For Tony — GetEducated</div>
+    <h1>Every note from your May&nbsp;19 review, <em>carried</em>.</h1>
+    <p>Nine comments on the Cybersecurity article. Nine fixes shipped. The generation pipeline now follows your rules from this point forward — and the report that follows shows each note paired with the work that closed it.</p>
+  </section>
 
+  <section id="scoreboard">
+    <div class="section-head"><span class="roman">I</span><span class="sep">·</span><span class="title">The Scoreboard</span></div>
+    <h2 class="headline">Where the May 19 review stands.</h2>
+    <div class="as-of">As of 21 May 2026</div>
+    <p class="lede">Nine word-for-word notes from your review of <em>online-cybersecurity-degrees-without-ai-focus-for-2026-2</em>. Each one rewritten as a rule in the generator, the publisher, or the editorial guardrails. All nine past the line.</p>
+
+    <div class="score-card">
+      <div class="url">perdia8.vercel.app</div>
+      <div class="big">9<sub>/9</sub></div>
+      <div class="stats">
+        <div class="stat gold"><span class="n">9</span><span class="k">Carried</span></div>
+        <div class="stat"><span class="n">0</span><span class="k">Partial</span></div>
+        <div class="stat"><span class="n">0</span><span class="k">Pending</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="carries">
+    <div class="section-head"><span class="roman">II</span><span class="sep">·</span><span class="title">What carries</span></div>
+    <h2 class="headline">Nine of nine.</h2>
+    <p class="lede">Each note in your own words, followed by what changed.</p>
+
+    <div class="row">
+      <div class="mark">✓</div>
+      <div class="desc">
+        Links now route through GetEducated shortcodes. Raw or affiliate-style hrefs are blocked at publish.
+        <em>"Internal and external linking are not following rules and using short codes."</em>
+      </div>
+      <div class="ref"><span class="id">01</span> Shortcodes</div>
+    </div>
+
+    <div class="row">
+      <div class="mark">✓</div>
+      <div class="desc">
+        The "View More Degrees" button URL is now built from the shortcode's category &amp; concentration, and the button is a real, clickable link.
+        <em>"The view more degrees buttons are not driving the user to the same category and concentration as the short code calls for."</em>
+      </div>
+      <div class="ref"><span class="id">02</span> CTA</div>
+    </div>
+
+    <div class="row">
+      <div class="mark">✓</div>
+      <div class="desc">
+        When an article covers two degree levels, the two GE Picks blocks now split across them — one bachelor's, one master's — so the reader sees a wider range of schools.
+        <em>"These short codes for GE Picks can be improved; one could be at the bachelor's level and the other at the masters."</em>
+      </div>
+      <div class="ref"><span class="id">03</span> GE Picks</div>
+    </div>
+
+    <div class="row">
+      <div class="mark">✓</div>
+      <div class="desc">
+        Nursing-into-Business-Administration drift is closed. The system refuses to match topics it isn't confident about and flags them for review instead of guessing.
+        <em>"For the Nursing article, it put in the cat and conc codes for business administration."</em>
+      </div>
+      <div class="ref"><span class="id">04</span> Topic match</div>
+    </div>
+
+    <div class="row">
+      <div class="mark">✓</div>
+      <div class="desc">
+        Paragraphs that mention bachelor's or master's degree paths now carry an internal link to the matching cat / con / level URL on the first mention.
+        <em>"There is a paragraph about bachelors and masters degree paths with no internal linking."</em>
+      </div>
+      <div class="ref"><span class="id">05</span> Internal links</div>
+    </div>
+
+    <div class="row">
+      <div class="mark">✓</div>
+      <div class="desc">
+        Each article now pulls the best-match Ranking Reports by topic and degree level and links them through the proper shortcode under a "Related Ranking Reports" heading.
+        <em>"No short code used for Ranking Report linking. Also the Ranking reports should be the best match content."</em>
+      </div>
+      <div class="ref"><span class="id">06</span> Ranking reports</div>
+    </div>
+
+    <div class="row">
+      <div class="mark">✓</div>
+      <div class="desc">
+        The "How we researched and created this article" block is stripped from new articles by default. Can be turned back on with a single setting if you ever want it again.
+        <em>"At the bottom of the page, this content block can be removed."</em>
+      </div>
+      <div class="ref"><span class="id">07</span> Bottom block</div>
+    </div>
+
+    <div class="row">
+      <div class="mark">✓</div>
+      <div class="desc">
+        The AI is no longer allowed to hedge on accreditation. It must state real consequences — loss of federal aid, non-transferable credits, ineligibility for licensure — and cite a real source like the Department of Education or CHEA.
+        <em>"This sentence doesn't properly reinforce the importance of accreditation."</em>
+      </div>
+      <div class="ref"><span class="id">08</span> Accreditation</div>
+    </div>
+
+    <div class="row">
+      <div class="mark">✓</div>
+      <div class="desc">
+        Every published article now lands in "Articles" plus a second topic-specific category (cybersecurity, nursing, business, education, etc.) chosen automatically from the content.
+        <em>"In WP, a second category is not selected, but a second category should also be selected based on the best fit for the content piece."</em>
+      </div>
+      <div class="ref"><span class="id">09</span> WP category</div>
+    </div>
+  </section>
+
+  <section id="verdict">
+    <div class="section-head"><span class="roman">III</span><span class="sep">·</span><span class="title">The Verdict</span></div>
+    <p class="verdict-body">All nine notes from your May&nbsp;19 review are carried. The Cybersecurity article was the test; the rules now live inside the generator and the publisher, so every article from today forward inherits the same guardrails — <em>quietly, automatically, without exception</em>.</p>
+    <div class="tagline">— <span class="gold">Move in silence.</span> Ship the work. —</div>
+  </section>
+
+  <footer>
+    <div class="gold">Disruptors Media · Perdia for GetEducated</div>
+    <div style="margin-top: 10px;">21 May 2026</div>
+  </footer>
 </div>
 </body>
 </html>
