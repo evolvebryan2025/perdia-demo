@@ -30,6 +30,14 @@ export function useContentIdeas(filters = {}) {
         query = query.eq('source', filters.source)
       }
 
+      if (filters.search) {
+        const term = filters.search.trim()
+        if (term) {
+          // Match title or description, case-insensitive.
+          query = query.or(`title.ilike.%${term}%,description.ilike.%${term}%`)
+        }
+      }
+
       const { data, error } = await query
 
       if (error) throw error

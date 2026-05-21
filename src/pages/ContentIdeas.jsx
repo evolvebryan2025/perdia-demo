@@ -71,6 +71,7 @@ function ContentIdeas() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [filterStatus, setFilterStatus] = useState(null)
   const [filterMonetization, setFilterMonetization] = useState(null) // high, medium, low, or null for all
+  const [searchQuery, setSearchQuery] = useState('')
   const [generatingIdea, setGeneratingIdea] = useState(null)
   const [rejectModalIdea, setRejectModalIdea] = useState(null) // For rejection reason modal
   const [activeTab, setActiveTab] = useState('ideas') // ideas, history
@@ -98,7 +99,11 @@ function ContentIdeas() {
   const [sortKey, setSortKey] = useStoredState('perdia:sort:ideas', 'newest')
   const sort = resolveSort(CONTENT_SORT_OPTIONS, sortKey)
 
-  const { data: ideas = [], isLoading } = useContentIdeas({ status: filterStatus, sort })
+  const { data: ideas = [], isLoading } = useContentIdeas({
+    status: filterStatus,
+    search: searchQuery || undefined,
+    sort,
+  })
   const createIdea = useCreateContentIdea()
   const updateIdea = useUpdateContentIdea()
   const deleteIdeaWithReason = useDeleteContentIdeaWithReason()
@@ -542,6 +547,18 @@ function ContentIdeas() {
         </TabsList>
 
         <TabsContent value="ideas" className="mt-0">
+          {/* Search bar */}
+          <div className="relative mb-4 max-w-xl">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search ideas by title or description…"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            />
+          </div>
+
           {/* Filters + Sort */}
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <button

@@ -19,7 +19,7 @@
  */
 
 import { supabase } from './supabaseClient'
-import { validateContent, BLOCKED_COMPETITORS } from './validation/linkValidator'
+import { validateContent, BLOCKED_COMPETITORS, findDuplicateExternalAnchors } from './validation/linkValidator'
 import { detectTriplicates } from './validation/contentValidator'
 
 // Default thresholds (used when system_settings unavailable)
@@ -401,6 +401,25 @@ export function calculateQualityScore(content, article = {}, thresholds = DEFAUL
             : 'Strong language',
         issue: hasWeak
           ? 'Accreditation is discussed with hedge phrases ("may prefer", "could be beneficial"). Rewrite with concrete consequences (federal aid eligibility, transfer credit, licensure) and cite ed.gov/CHEA.'
+          : null,
+      }
+    })(),
+    duplicateExternalLinks: (() => {
+      // Tony's May 21 round-3 review flagged the same BLS URL being
+      // linked twice in the BSN article. The dedupe pass at generation
+      // time should catch this for new articles; this check guards
+      // against any that slip through (re-publish, manual edits, etc.).
+      const dupes = findDuplicateExternalAnchors(content)
+      return {
+        type: 'duplicate_external_links',
+        passed: dupes.length === 0,
+        critical: false,
+        enabled: true,
+        severity: 'warning',
+        label: 'No duplicate external citations',
+        value: dupes.length === 0 ? 'No duplicates' : `${dupes.length} URL(s) linked more than once`,
+        issue: dupes.length > 0
+          ? `Duplicate external link(s): ${dupes.slice(0, 3).join(', ')}${dupes.length > 3 ? '…' : ''}. Each external source should be cited once.`
           : null,
       }
     })(),

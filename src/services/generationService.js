@@ -27,6 +27,9 @@ import { calculateQualityScore, getQualityThresholds, calculateQualityScoreAsync
 import { detectSubjectArea, scoreArticlesForLinking, selectDiverseLinks, normalizeUrl } from './subjectMatcher'
 import { extractLinks as extractLinksFromContent } from './validation/linkValidator'
 import { buildFaqHtml, hasFaqSection } from '../lib/faqHtml'
+import { wrapInlineRankingPhrase, insertSectionAwareLinks } from './contentLinkAugmenter'
+import { autoWrapSchoolMentionsAsync } from './schoolLinkMatcher'
+import { dedupeExternalAnchors } from './validation/linkValidator'
 
 class GenerationService {
   constructor() {
@@ -911,6 +914,38 @@ EXAMPLES OF WHAT NEVER TO DO:
                     inserted: reports.map((r) => ({ url: r.report_url, level: r.degree_level, score: r.score })),
                     reasoning: `Inserted ${reports.length} best-match ranking report link(s) for levels ${levelNames.join(', ')}.`,
                   })
+
+                  // Round-3 Fix-4: inline ranking-report link. When the body
+                  // mentions "ranking report(s)" / "annual cost-and-pricing
+                  // guide" / similar phrasing, wrap the first occurrence in
+                  // a shortcode linking to the top-scored report.
+                  const inlineRes = wrapInlineRankingPhrase(finalContent, reports[0])
+                  finalContent = inlineRes.content
+                  if (inlineRes.wrapped > 0) {
+                    this.logReasoning('inline_ranking_link', {
+                      url: reports[0].report_url,
+                      reasoning: 'Wrapped first inline mention of ranking reports in [su_ge-cta] linking to the top-match rank.',
+                    })
+                  }
+
+                  // Round-3 Fix-5: section-aware links. Inject one rank-report
+                  // link into the bachelor's/master's H2 section paragraph
+                  // when those sections exist.
+                  const levelRankUrls = {}
+                  for (const r of reports) {
+                    const lvl = (r.degree_level || '').toLowerCase()
+                    if (lvl.includes('associate')) levelRankUrls.associate = r.report_url
+                    else if (lvl.includes('bachelor')) levelRankUrls.bachelor = r.report_url
+                    else if (lvl.includes('master')) levelRankUrls.master = r.report_url
+                    else if (lvl.includes('doctor')) levelRankUrls.doctorate = r.report_url
+                  }
+                  const sectionRes = insertSectionAwareLinks(finalContent, { levelRankUrls })
+                  finalContent = sectionRes.content
+                  if (sectionRes.wrapped > 0) {
+                    this.logReasoning('section_aware_links', {
+                      reasoning: `Injected ${sectionRes.wrapped} section-aware degree-level link(s) into matching H2 sections.`,
+                    })
+                  }
                 }
               } catch (rrErr) {
                 console.warn('[Generation] Ranking report lookup failed:', rrErr?.message)
@@ -960,6 +995,36 @@ EXAMPLES OF WHAT NEVER TO DO:
       }
 
       this.updateProgress(onProgress, 'Running content validation...', 68)
+
+      // Round-3 Fix-3: wrap the first mention of any known GetEducated
+      // school in a [su_ge-cta school="<id>"] shortcode. Tony's May 21
+      // review flagged the Special Ed article ("North Carolina A & T
+      // State University" appearing as plain text instead of a lead-gen
+      // link).
+      try {
+        const schoolRes = await autoWrapSchoolMentionsAsync(finalContent)
+        if (schoolRes.wrapped > 0) {
+          finalContent = schoolRes.content
+          this.logReasoning('school_name_links', {
+            count: schoolRes.wrapped,
+            reasoning: `Wrapped ${schoolRes.wrapped} school name mention(s) in [su_ge-cta school] shortcode(s).`,
+          })
+        }
+      } catch (schoolErr) {
+        console.warn('[Generation] School-name auto-wrap failed:', schoolErr?.message)
+      }
+
+      // Round-3 Fix-2: dedupe duplicate external links (BLS-style). Same
+      // external URL wrapped in two anchors → keep the first, unwrap the
+      // rest. Tony's BSN review flagged this exact pattern.
+      const dedupeRes = dedupeExternalAnchors(finalContent)
+      if (dedupeRes.removed > 0) {
+        finalContent = dedupeRes.content
+        this.logReasoning('external_link_dedupe', {
+          removed: dedupeRes.removed,
+          reasoning: `Removed ${dedupeRes.removed} duplicate external citation anchor(s).`,
+        })
+      }
 
       // Append the canonical <h2>Frequently Asked Questions</h2> block built
       // from Grok's faqs array (xlsx spec rows 10–12). Grok returns FAQs as

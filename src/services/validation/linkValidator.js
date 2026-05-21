@@ -306,6 +306,60 @@ export function validateContent(content) {
 }
 
 /**
+ * Strip duplicate external anchor tags from HTML. When the same external
+ * URL (ignoring trailing slash, hash, and case) is wrapped in <a> tags
+ * more than once, we keep the first anchor intact and unwrap subsequent
+ * occurrences — the anchor text stays in place but the second <a> tag
+ * is removed. Internal GetEducated links are left alone (multiple
+ * internal links to the same article are fine).
+ *
+ * Tony's May 21 review flagged the BSN article having the same BLS URL
+ * linked twice. This pass runs at the end of generation so the saved
+ * article never carries duplicate external citations.
+ *
+ * Returns { content, removed: number }.
+ */
+export function dedupeExternalAnchors(content) {
+  if (!content) return { content: '', removed: 0 }
+  const seen = new Set()
+  let removed = 0
+  const out = content.replace(
+    /<a\b[^>]*\bhref="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi,
+    (match, href, inner) => {
+      if (!/^https?:\/\//i.test(href)) return match
+      if (/(?:www\.|stage\.)?geteducated\.com/i.test(href)) return match
+      const key = href.toLowerCase().split('#')[0].replace(/\/$/, '')
+      if (seen.has(key)) {
+        removed += 1
+        return inner
+      }
+      seen.add(key)
+      return match
+    }
+  )
+  return { content: out, removed }
+}
+
+/**
+ * Detect duplicate external anchors for quality scoring (does not mutate
+ * the content). Returns the list of URLs that appear more than once.
+ */
+export function findDuplicateExternalAnchors(content) {
+  if (!content) return []
+  const counts = new Map()
+  const re = /<a\b[^>]*\bhref="([^"]+)"[^>]*>[\s\S]*?<\/a>/gi
+  let m
+  while ((m = re.exec(content)) !== null) {
+    const href = m[1]
+    if (!/^https?:\/\//i.test(href)) continue
+    if (/(?:www\.|stage\.)?geteducated\.com/i.test(href)) continue
+    const key = href.toLowerCase().split('#')[0].replace(/\/$/, '')
+    counts.set(key, (counts.get(key) || 0) + 1)
+  }
+  return [...counts.entries()].filter(([, n]) => n > 1).map(([url]) => url)
+}
+
+/**
  * Find anchor tags pointing at affiliate-style URLs (commission, affiliate,
  * tracking, click, ref=, aff=, partner=) that aren't on geteducated.com.
  * Returns [{url, anchorText}].

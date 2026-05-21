@@ -4,11 +4,16 @@
  * straight to Supabase `.order(column, { ascending })`.
  */
 
+// "Newest" sorts by updated_at so an item that was just generated, edited,
+// or had its status changed bubbles to the top. New rows still come up
+// first because updated_at defaults to created_at on insert.
 export const CONTENT_SORT_OPTIONS = [
-  { key: 'newest',     label: 'Newest first',  column: 'created_at', direction: 'desc' },
-  { key: 'oldest',     label: 'Oldest first',  column: 'created_at', direction: 'asc'  },
-  { key: 'title-asc',  label: 'Title A → Z',   column: 'title',      direction: 'asc'  },
-  { key: 'title-desc', label: 'Title Z → A',   column: 'title',      direction: 'desc' },
+  { key: 'newest',      label: 'Most recent',     column: 'updated_at', direction: 'desc' },
+  { key: 'oldest',      label: 'Least recent',    column: 'updated_at', direction: 'asc'  },
+  { key: 'created-new', label: 'Newest created',  column: 'created_at', direction: 'desc' },
+  { key: 'created-old', label: 'Oldest created',  column: 'created_at', direction: 'asc'  },
+  { key: 'title-asc',   label: 'Title A → Z',     column: 'title',      direction: 'asc'  },
+  { key: 'title-desc',  label: 'Title Z → A',     column: 'title',      direction: 'desc' },
 ]
 
 export const PERSON_SORT_OPTIONS = [

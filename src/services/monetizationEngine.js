@@ -154,17 +154,50 @@ export class MonetizationEngine {
       ? Array.from(new Set(degreeLevelCodes))
       : null
 
+    // Tony's May 21 round-3 review: when two GE Picks share the same
+    // (category, concentration, level) — including the case "both have
+    // level=2" or "both have no level" — the FIRST slot drops its level
+    // so it becomes the generic "any level / all" view, leaving the
+    // second to keep its specific level. This guarantees the two cards
+    // expose different school spreads.
+    //
+    // Identify which slot indices emit su_ge-picks (i.e. monetization
+    // slots, excluding the qdf widget) so we only enforce uniqueness on
+    // those.
+    const monetizationSlotIndices = slotConfigs
+      .map((cfg, i) => ((SLOT_TYPES[cfg.type] || SLOT_TYPES.table).shortcodeType === 'su_ge-picks' ? i : -1))
+      .filter((i) => i >= 0)
+
+    const baseLevels = distinctLevels && distinctLevels.length
+      ? distinctLevels
+      : (degreeLevelCode ? [degreeLevelCode] : [])
+
+    // Build per-slot level assignment ahead of the loop.
+    const levelBySlotIndex = new Map()
+    if (monetizationSlotIndices.length >= 2 && baseLevels.length < monetizationSlotIndices.length) {
+      // Fewer levels than picks slots → FIRST slot becomes generic (null),
+      // remaining slots rotate through baseLevels.
+      levelBySlotIndex.set(monetizationSlotIndices[0], null)
+      monetizationSlotIndices.slice(1).forEach((slotIdx, i) => {
+        levelBySlotIndex.set(slotIdx, baseLevels[i % Math.max(baseLevels.length, 1)] || null)
+      })
+    } else {
+      // Enough levels (or single slot): one unique level per slot.
+      monetizationSlotIndices.forEach((slotIdx, i) => {
+        levelBySlotIndex.set(slotIdx, baseLevels[i] ?? null)
+      })
+    }
+
     // Process each slot
     const processedSlots = []
     const usedProgramIds = new Set() // Track programs already used to avoid duplicates
 
     for (let i = 0; i < slotConfigs.length; i++) {
       const slotConfig = slotConfigs[i]
-      // If the slot is the Quick Degree Find widget it ignores degree level;
-      // for table/compact/hero slots, pick a level from the rotation.
-      const slotLevel = distinctLevels
-        ? distinctLevels[i % distinctLevels.length]
-        : degreeLevelCode
+      // Use the pre-computed level assignment so duplicate (cat, conc, level)
+      // triples can't happen. Falls back to degreeLevelCode for non-monetization
+      // slots (e.g. qdf widget — which ignores it anyway).
+      const slotLevel = levelBySlotIndex.has(i) ? levelBySlotIndex.get(i) : degreeLevelCode
 
       const slotResult = await this.processSlot({
         categoryId,
