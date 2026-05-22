@@ -46,6 +46,7 @@ class GrokClient {
       authorName = null,
       contentRulesContext = null,
       userSpecifiedContext = null, // Schools/programs from idea title/description
+      referenceContent = null, // REFINE MODE: existing article body to rewrite under current rules
     } = options
 
     try {
@@ -59,6 +60,7 @@ class GrokClient {
         authorName,
         contentRulesContext,
         userSpecifiedContext,
+        referenceContent,
       })
 
       return result

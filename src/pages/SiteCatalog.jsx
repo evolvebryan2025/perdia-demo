@@ -29,6 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { SortDropdown } from '@/components/ui/sort-dropdown'
 import { NewBadge } from '@/components/ui/new-badge'
+import { DateLabel } from '@/components/ui/date-label'
 import { CATALOG_SORT_OPTIONS, resolveSort } from '@/lib/sortOptions'
 import { useStoredState } from '@/lib/useStoredState'
 import {
@@ -699,6 +700,9 @@ export default function SiteCatalog() {
                                     <NewBadge timestamp={article.created_at} />
                                   </span>
                                   <p className="text-sm text-gray-500 line-clamp-1">{article.slug}</p>
+                                  <div className="mt-1">
+                                    <DateLabel createdAt={article.created_at} updatedAt={article.updated_at} />
+                                  </div>
                                 </div>
                               </div>
                             </td>
@@ -829,6 +833,9 @@ export default function SiteCatalog() {
                                   <NewBadge timestamp={article.created_at} />
                                 </div>
                                 <p className="text-sm text-gray-500 line-clamp-1">{article.url}</p>
+                                <div className="mt-1">
+                                  <DateLabel createdAt={article.created_at} updatedAt={article.updated_at} />
+                                </div>
                               </div>
                             </div>
                           </td>

@@ -434,6 +434,10 @@ EXAMPLES OF WHAT NEVER TO DO:
       autoFix = true,
       maxFixAttempts = 3,
       qualityThreshold = 85,
+      // REFINE MODE: existing article HTML passed in so Grok can rewrite
+      // under current rules instead of starting from scratch. Forwarded
+      // to grokClient.generateDraft via the option of the same name.
+      referenceContent = null,
     } = options
 
     try {
@@ -585,6 +589,7 @@ EXAMPLES OF WHAT NEVER TO DO:
         authorProfile: authorPrompt, // Pass comprehensive author profile
         authorName: contributor?.name,
         contentRulesContext: contentRulesPrompt, // NEW: Pass content rules to AI
+        referenceContent, // REFINE MODE — rewrite existing draft under current rules
       })
 
       // CRITICAL: Ensure HTML formatting is proper after draft generation
@@ -616,6 +621,7 @@ EXAMPLES OF WHAT NEVER TO DO:
           cheapestSchoolsContext: cheapestSchoolsPrompt, // Include cheapest schools in retry too
           authorProfile: authorPrompt,
           authorName: contributor?.name,
+          referenceContent,
         })
 
         // Re-validate

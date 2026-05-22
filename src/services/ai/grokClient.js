@@ -264,9 +264,10 @@ class GrokClient {
       authorProfile = null, // Comprehensive author profile from useContributors
       authorName = null,
       contentRulesContext = null, // Dynamic content rules from database
+      referenceContent = null, // REFINE MODE — existing draft to rewrite under current rules
     } = options
 
-    const prompt = this.buildDraftPrompt(idea, contentType, targetWordCount, costDataContext, authorProfile, authorName, contentRulesContext, cheapestSchoolsContext)
+    const prompt = this.buildDraftPrompt(idea, contentType, targetWordCount, costDataContext, authorProfile, authorName, contentRulesContext, cheapestSchoolsContext, referenceContent)
 
     // Build system prompt with optional author profile
     let systemPrompt = 'You are an expert content writer who creates high-quality, engaging articles. You write in a natural, conversational style with varied sentence structure.'
@@ -310,10 +311,19 @@ Follow the author's voice, style, and guidelines precisely. This will ensure con
    * Build prompt for article draft generation
    * IMPORTANT: Includes GetEducated-specific content rules (now configurable from database)
    */
-  buildDraftPrompt(idea, contentType, targetWordCount, costDataContext = null, authorProfile = null, authorName = null, contentRulesContext = null, cheapestSchoolsContext = null) {
+  buildDraftPrompt(idea, contentType, targetWordCount, costDataContext = null, authorProfile = null, authorName = null, contentRulesContext = null, cheapestSchoolsContext = null, referenceContent = null) {
     let costDataSection = ''
     if (costDataContext) {
       costDataSection = `\n\n${costDataContext}\n`
+    }
+
+    // REFINE MODE — when an existing draft is supplied, prepend an
+    // instruction so Grok rewrites under the current rules instead of
+    // starting from scratch. Preserves the topic structure, the author
+    // voice, and any factual data points already in the article.
+    let refineSection = ''
+    if (referenceContent && referenceContent.trim()) {
+      refineSection = `\n=== REFINE MODE — REWRITE EXISTING DRAFT ===\n\nAn earlier draft of this article exists. Your job is to REWRITE it from scratch under the CURRENT GetEducated rules below, while preserving the topic structure, the author's voice, and any factual data points (costs, salaries, school names, citations). Update everything else to match the current rules — shortcodes, link patterns, accreditation language, FAQ format, etc.\n\nThe reference draft follows. Use it as guidance but produce a fresh, improved version — do not copy it verbatim.\n\n--- BEGIN REFERENCE DRAFT ---\n${referenceContent}\n--- END REFERENCE DRAFT ---\n\n=== END REFINE MODE ===\n`
     }
 
     // Cheapest client schools section -- injected for affordability/cost articles
@@ -334,7 +344,7 @@ Follow the author's voice, style, and guidelines precisely. This will ensure con
     }
 
     return `Generate a comprehensive ${contentType} article based on this content idea for GetEducated.com, an online education resource.
-
+${refineSection}
 ${ANTI_HALLUCINATION_RULES}
 ${costDataSection}${cheapestSchoolsSection}${authorSection}
 

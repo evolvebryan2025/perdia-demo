@@ -7,6 +7,8 @@ import { DeleteWithReasonModal } from '../components/ui/DeleteWithReasonModal'
 import { Search, Filter, Loader2, FileText, ThumbsUp, ThumbsDown, Trash2 } from 'lucide-react'
 import { SortDropdown } from '../components/ui/sort-dropdown'
 import { NewBadge } from '../components/ui/new-badge'
+import { DateLabel } from '../components/ui/date-label'
+import { RegenerateButton } from '../components/article/RegenerateButton'
 import { CONTENT_SORT_OPTIONS, resolveSort } from '../lib/sortOptions'
 import { useStoredState } from '../lib/useStoredState'
 
@@ -157,6 +159,10 @@ function ContentLibrary() {
               <span className="capitalize">{article.status?.replace('_', ' ')}</span>
             </div>
 
+            <div className="mt-2">
+              <DateLabel createdAt={article.created_at} updatedAt={article.updated_at} />
+            </div>
+
             <div className="flex items-center justify-between mt-2">
               {article.contributor_name && (
                 <p className="text-xs text-gray-600">
@@ -164,6 +170,13 @@ function ContentLibrary() {
                 </p>
               )}
               <ArticleFeedback articleId={article.id} />
+            </div>
+
+            <div
+              className="mt-3 flex justify-end"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <RegenerateButton articleId={article.id} />
             </div>
           </div>
         ))}

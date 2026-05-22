@@ -42,6 +42,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { SortDropdown } from '@/components/ui/sort-dropdown'
 import { NewBadge } from '@/components/ui/new-badge'
+import { DateLabel } from '@/components/ui/date-label'
+import { RegenerateButton } from '@/components/article/RegenerateButton'
 import { REVIEW_SORT_OPTIONS, resolveSort } from '@/lib/sortOptions'
 import { useStoredState } from '@/lib/useStoredState'
 
@@ -579,6 +581,7 @@ export default function ReviewQueue() {
                           {/* Badges Row */}
                           <div className="flex items-center gap-2 mb-3 flex-wrap">
                             <NewBadge timestamp={article.created_at} />
+                            <DateLabel createdAt={article.created_at} updatedAt={article.updated_at} />
                             <Badge
                               variant="outline"
                               className={`${STATUS_COLORS[article.status]} border font-medium`}
@@ -759,6 +762,12 @@ export default function ReviewQueue() {
                             <FileText className="w-4 h-4" />
                             Edit
                           </Button>
+
+                          <RegenerateButton
+                            articleId={article.id}
+                            onComplete={() => refetch()}
+                            className="w-full"
+                          />
 
                           <Button
                             variant="ghost"

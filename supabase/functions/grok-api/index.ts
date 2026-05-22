@@ -181,14 +181,21 @@ interface DraftOptions {
   authorProfile?: string | null
   authorName?: string | null
   contentRulesContext?: string | null
+  referenceContent?: string | null
 }
 
 function buildDraftPrompt(options: DraftOptions): string {
-  const { idea, contentType, targetWordCount, costDataContext, authorProfile, authorName, contentRulesContext } = options
+  const { idea, contentType, targetWordCount, costDataContext, authorProfile, authorName, contentRulesContext, referenceContent } = options
 
   let costDataSection = ''
   if (costDataContext) {
     costDataSection = `\n\n${costDataContext}\n`
+  }
+
+  // REFINE MODE — rewrite existing article under current rules.
+  let refineSection = ''
+  if (referenceContent && referenceContent.trim()) {
+    refineSection = `\n=== REFINE MODE — REWRITE EXISTING DRAFT ===\n\nAn earlier draft of this article exists. Your job is to REWRITE it from scratch under the CURRENT GetEducated rules below, while preserving the topic structure, the author's voice, and any factual data points (costs, salaries, school names, citations). Update everything else to match the current rules — shortcodes, link patterns, accreditation language, FAQ format, etc.\n\nThe reference draft follows. Use it as guidance but produce a fresh, improved version — do not copy it verbatim.\n\n--- BEGIN REFERENCE DRAFT ---\n${referenceContent}\n--- END REFERENCE DRAFT ---\n\n=== END REFINE MODE ===\n`
   }
 
   let authorSection = ''
@@ -242,7 +249,7 @@ function buildDraftPrompt(options: DraftOptions): string {
   }
 
   return `Generate a comprehensive ${contentType} article based on this content idea for GetEducated.com, an online education resource.
-
+${refineSection}
 ${ANTI_HALLUCINATION_RULES}
 ${costDataSection}${authorSection}
 
@@ -415,13 +422,14 @@ serve(async (req) => {
           authorProfile = null,
           authorName = null,
           contentRulesContext = null,
+          referenceContent = null,
         } = payload
 
         if (!idea) {
           throw new Error('Missing required parameter: idea')
         }
 
-        console.log('Generating draft for:', idea.title)
+        console.log('Generating draft for:', idea.title, referenceContent ? '(REFINE MODE)' : '')
 
         const prompt = buildDraftPrompt({
           idea,
@@ -431,6 +439,7 @@ serve(async (req) => {
           authorProfile,
           authorName,
           contentRulesContext,
+          referenceContent,
         })
 
         // Build system prompt with optional author profile

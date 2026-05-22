@@ -41,6 +41,7 @@ import { RichTextEditor, getWordCount } from '@/components/ui/rich-text-editor'
 
 // UI Components
 import { Button } from '@/components/ui/button'
+import { RegenerateButton } from '@/components/article/RegenerateButton'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -871,6 +872,15 @@ function ArticleEditorContent() {
                 </>
               )}
             </Button>
+
+            {/* Regenerate Button — re-runs current pipeline rules over this article */}
+            {article.id && (
+              <RegenerateButton
+                articleId={article.id}
+                onComplete={() => refetch?.()}
+                size="default"
+              />
+            )}
 
             {/* Publish Button - prominent when ready */}
             {article.status === 'ready_to_publish' && (

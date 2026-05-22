@@ -57,6 +57,7 @@ import { useErrorModal } from '../components/ui/ErrorModal'
 import ArticlePreviewModal from '../components/ideas/ArticlePreviewModal'
 import { SortDropdown } from '../components/ui/sort-dropdown'
 import { NewBadge } from '../components/ui/new-badge'
+import { DateLabel } from '../components/ui/date-label'
 import { CONTENT_SORT_OPTIONS, resolveSort } from '../lib/sortOptions'
 import { useStoredState } from '../lib/useStoredState'
 
@@ -844,6 +845,7 @@ function IdeaCard({ idea, onApprove, onReject, onDelete, onGenerate, onQuickFeed
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2 flex-wrap">
           <NewBadge timestamp={idea.created_at} />
+          <DateLabel createdAt={idea.created_at} updatedAt={idea.updated_at} />
           <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusConfig.color}`}>
             {statusConfig.label}
           </span>

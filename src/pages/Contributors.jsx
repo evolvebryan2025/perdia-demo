@@ -24,6 +24,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { SortDropdown } from '@/components/ui/sort-dropdown'
 import { NewBadge } from '@/components/ui/new-badge'
+import { DateLabel } from '@/components/ui/date-label'
 import { PERSON_SORT_OPTIONS, resolveSort } from '@/lib/sortOptions'
 import { useStoredState } from '@/lib/useStoredState'
 import {
@@ -447,6 +448,7 @@ export default function Contributors() {
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <h3 className="font-bold text-gray-900 text-lg">{contributor.name}</h3>
                                       <NewBadge timestamp={contributor.created_at} />
+                                      <DateLabel createdAt={contributor.created_at} updatedAt={contributor.updated_at} />
                                     </div>
                                     {displayName && (
                                       <p className="text-sm text-gray-500">
@@ -582,6 +584,7 @@ export default function Contributors() {
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <h3 className="font-bold text-gray-900">{contributor.name}</h3>
                                       <NewBadge timestamp={contributor.created_at} />
+                                      <DateLabel createdAt={contributor.created_at} updatedAt={contributor.updated_at} />
                                     </div>
                                     <Badge
                                       variant="outline"

@@ -100,6 +100,10 @@ export function useGenerateArticle() {
 /**
  * Regenerate article content only (no database save).
  * Use this when updating an existing article — call updateArticle separately to save.
+ *
+ * Pass `options.referenceContent` to enable REFINE mode: Grok receives the
+ * existing draft as a reference and rewrites under current rules instead
+ * of starting from scratch (preserves voice + structure + manual edits).
  */
 export function useRegenerateContent() {
   return useMutation({
@@ -115,6 +119,7 @@ export function useRegenerateContent() {
           addInternalLinks: options?.addInternalLinks !== false,
           autoFix: options?.autoFix !== false,
           maxFixAttempts: options?.maxFixAttempts || 3,
+          referenceContent: options?.referenceContent || null,
         },
         onProgress
       )
@@ -129,6 +134,99 @@ export function useRegenerateContent() {
     },
     onError: (error) => {
       console.error('[useRegenerateContent] Generation failed:', error)
+    },
+  })
+}
+
+/**
+ * Regenerate an EXISTING article in place. Replaces the article's content
+ * with a fresh draft produced by the current pipeline (so all the latest
+ * fixes — level uniqueness, dedupe, school shortcodes, MASK fix, etc. —
+ * apply to articles created before those fixes shipped).
+ *
+ * @param mode  'fresh'  — discard existing draft, start over from the idea
+ *              'refine' — keep existing draft as reference, rewrite it under
+ *                         current rules
+ */
+export function useRegenerateArticle() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ articleId, mode = 'refine', onProgress }) => {
+      if (!articleId) throw new Error('articleId is required')
+
+      // Pull the article + its source idea in one round-trip.
+      const { data: article, error: articleErr } = await supabase
+        .from('articles')
+        .select('*, content_ideas(*), article_contributors(*)')
+        .eq('id', articleId)
+        .single()
+
+      if (articleErr || !article) {
+        throw new Error(articleErr?.message || 'Article not found')
+      }
+
+      const idea = article.content_ideas || {
+        // Fall back to a stub idea if the article wasn't linked to one.
+        id: null,
+        title: article.title,
+        description: article.excerpt || article.meta_description || '',
+        topics: article.topics || [],
+      }
+
+      await loadHumanizationSettings()
+
+      const articleData = await generationService.generateArticleComplete(
+        idea,
+        {
+          contentType: article.content_type || 'guide',
+          targetWordCount: article.target_word_count || 2000,
+          autoAssignContributor: false,
+          addInternalLinks: true,
+          autoFix: true,
+          maxFixAttempts: 3,
+          referenceContent: mode === 'refine' ? (article.content || null) : null,
+        },
+        onProgress
+      )
+
+      if (!articleData?.content) {
+        throw new Error('Regeneration produced no content')
+      }
+
+      // Persist the new draft over the existing row. Preserve id /
+      // created_at / slug / contributor; bump updated_at automatically
+      // via the DB trigger.
+      const update = {
+        content: articleData.content,
+        excerpt: articleData.excerpt || article.excerpt,
+        meta_title: articleData.meta_title || article.meta_title,
+        meta_description: articleData.meta_description || article.meta_description,
+        focus_keyword: articleData.focus_keyword || article.focus_keyword,
+        word_count: articleData.word_count || null,
+        quality_score: articleData.quality_score ?? null,
+        faqs: articleData.faqs || article.faqs,
+        ai_reasoning: articleData.ai_reasoning || article.ai_reasoning,
+        validation_warnings: articleData.validation_warnings || article.validation_warnings,
+      }
+
+      const { data: updated, error: updateErr } = await supabase
+        .from('articles')
+        .update(update)
+        .eq('id', articleId)
+        .select('*, article_contributors(*)')
+        .single()
+
+      if (updateErr) throw updateErr
+      return { article: updated, mode }
+    },
+    onSuccess: ({ article }) => {
+      queryClient.invalidateQueries({ queryKey: ['articles'] })
+      queryClient.invalidateQueries({ queryKey: ['article', article.id] })
+      queryClient.invalidateQueries({ queryKey: ['review-articles'] })
+    },
+    onError: (error) => {
+      console.error('[useRegenerateArticle] Regeneration failed:', error)
     },
   })
 }

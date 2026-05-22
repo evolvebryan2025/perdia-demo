@@ -40,6 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SortDropdown } from '@/components/ui/sort-dropdown'
 import { NewBadge } from '@/components/ui/new-badge'
+import { DateLabel } from '@/components/ui/date-label'
 import { KEYWORD_SORT_OPTIONS, resolveSort } from '@/lib/sortOptions'
 import { useStoredState } from '@/lib/useStoredState'
 import {
@@ -1199,6 +1200,9 @@ function LibraryTab() {
                                 Queued
                               </Badge>
                             )}
+                          </div>
+                          <div className="mt-1">
+                            <DateLabel createdAt={keyword.created_at} updatedAt={keyword.updated_at} />
                           </div>
                         </td>
                         <td className="p-4">
